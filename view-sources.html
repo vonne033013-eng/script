@@ -1,0 +1,48 @@
+<div class="workspace-view-panel" id="panelViewSources">
+  <div class="handoff-header-banner">
+     <div class="handoff-header-title">
+       <h2>Sources &amp; Suggestions</h2>
+       <p>Access core system databases or submit feature requests directly to the development pipeline.</p>
+     </div>
+  </div>
+  
+  <div class="handoff-split-grid">
+     <div>
+       <div class="handoff-card-box">
+         <div class="handoff-card-title">CORE SYSTEM DATABASES</div>
+         <div style="display:flex; flex-direction:column; gap:12px;">
+            <a href="https://docs.google.com/spreadsheets/d/1w1qRTNg53VUw9Z7lik_tFx5m05ssZwTyn1-9ZvT2hhA/edit" target="_blank" class="hub-entry-btn btn-alt" style="text-decoration:none; justify-content:flex-start;">
+               <span class="material-icons-round">table_chart</span> Attendance & Demographics DB
+            </a>
+            <a href="https://docs.google.com/spreadsheets/d/1NNAr_1Z9vgynr0GtKqCuPY8UwS7MqkaW0uiaU5P64ig/edit" target="_blank" class="hub-entry-btn btn-alt" style="text-decoration:none; justify-content:flex-start;">
+               <span class="material-icons-round">storage</span> Handoffs & Telemetry Logs DB
+            </a>
+         </div>
+       </div>
+       
+       <div class="handoff-card-box" style="margin-top: 24px;">
+         <div class="handoff-card-title">TEAM AUTOMATION SCRIPTS</div>
+         <div style="display:flex; flex-direction:column; gap:12px;">
+            <a href="https://script.google.com/a/macros/openlane.com/s/AKfycbyo1f4xJPVX8Bf7Tc4fADZ8t3keWOzsnvIgVZ7uUadePIuom_RNhNdnFGNQNsptmzj19A/exec" target="_blank" class="hub-entry-btn btn-alt" style="text-decoration:none; justify-content:flex-start; flex-direction:column; align-items:flex-start; gap:6px; padding:16px;">
+               <div style="display:flex; align-items:center; gap:8px;"><span class="material-icons-round">directions_car</span> Details Shop Invoicing</div>
+               <div style="font-size:10px; color:var(--sub); text-transform:none; letter-spacing:0; font-weight:500; white-space:normal; text-align:left; line-height:1.4;">For monitoring and having visibility on pending Vins to invoice and overall data.</div>
+            </a>
+            <a href="https://script.google.com/a/macros/openlane.com/s/AKfycbwk4WxzJ9kF7s3-pvLF_a0iVIOFizQbAycf_B5ZASaAmMoHeiP3-qy8p78YADGLD_j2TA/exec" target="_blank" class="hub-entry-btn btn-alt" style="text-decoration:none; justify-content:flex-start; flex-direction:column; align-items:flex-start; gap:6px; padding:16px;">
+               <div style="display:flex; align-items:center; gap:8px;"><span class="material-icons-round">receipt_long</span> PSI Invoicing</div>
+               <div style="font-size:10px; color:var(--sub); text-transform:none; letter-spacing:0; font-weight:500; white-space:normal; text-align:left; line-height:1.4;">To see total count visibility, AHT, across 3 VLC: Montreal, Toronto, Vancouver.</div>
+            </a>
+         </div>
+       </div>
+     </div>
+     
+     <div>
+       <div class="handoff-card-box">
+         <div class="handoff-card-title">SUBMIT FEEDBACK OR FEATURE REQUEST</div>
+         <textarea class="preview-textarea" id="feedbackInputUI" placeholder="Describe the feature request, bug, or suggestion here..." style="height:150px; margin-bottom:16px;"></textarea>
+         <button class="btn-draft-email" id="submitFeedbackBtnUI" onclick="submitSystemFeedback()">
+           <span class="material-icons-round">send</span> SUBMIT TO PIPELINE
+         </button>
+       </div>
+     </div>
+  </div>
+</div>

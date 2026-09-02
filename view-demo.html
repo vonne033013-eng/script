@@ -1,0 +1,58 @@
+<div class="workspace-view-panel" id="panelViewDemo">
+  <div class="org-chart-wrapper">
+    <h2 class="org-chart-title">Meet the Team</h2>
+    
+    <div class="org-tree">
+      
+      <!-- LEVEL 1: DIRECTORS -->
+      <div class="org-directors">
+        <!-- Left Director -->
+        <div class="director-card">
+          <div class="director-info" style="text-align: right;">
+            <div class="director-name">John Farquharson</div>
+            <div class="director-role">Sr. Director, Business<br>Architecture and Operations</div>
+          </div>
+          <div class="director-avatar" style="background: linear-gradient(135deg, #F59E0B, #D97706); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 20px;">
+            JF
+          </div>
+        </div>
+
+        <!-- Connecting Lines -->
+        <div class="director-link-line"></div>
+        <div class="director-down-line"></div>
+
+        <!-- Right Director -->
+        <div class="director-card">
+          <div class="director-avatar" style="background: linear-gradient(135deg, #10B981, #059669); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 20px;">
+            JA
+          </div>
+          <div class="director-info" style="text-align: left;">
+            <div class="director-name">Jay Araga</div>
+            <div class="director-role">OLPH Director of Operations</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- LEVEL 2: TEAM LEAD -->
+      <div class="org-lead">
+        <div class="lead-avatar">
+          <!-- Kryptie's specific avatar from your original code -->
+          <img src="https://ca.slack-edge.com/ED31V49MX-U04MQK3PKNG-32dadd47a1ec-512" alt="Kryptie Ramada">
+        </div>
+        <div class="lead-badge">
+          <div class="lead-name">Kryptie Ramada</div>
+          <div class="lead-role">PEX Lead</div>
+        </div>
+      </div>
+
+      <!-- Connector down to Team -->
+      <div class="lead-down-line"></div>
+
+      <!-- LEVEL 3: TEAM MEMBERS (Dynamically injected by JavaScript) -->
+      <div class="org-team-row" id="demographicsGridContainer">
+        <!-- JavaScript will auto-generate the team nodes and drawing lines here -->
+      </div>
+      
+    </div>
+  </div>
+</div>

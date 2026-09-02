@@ -1,0 +1,1862 @@
+<script>
+// --- ERROR HANDLER ---
+let pendingHandoffData = [];
+let pendingHandoffResource = "";
+let pendingHandoffDatesStr = "";
+function handleSystemError(context, errorMessage) {
+  alert(`⚠️ ${context}\n\nError Details: ${errorMessage}\n\nPlease notify me (Vonne) via Slack or Gmail: ma.yvonne.camba@openlane.com`);
+}
+
+// --- TASK ALLOCATION CHART & AGENT DIRECTORY LOGIC ---
+let allocationChartInstance = null;
+let globalAllocationData = {};
+let currentAllocationDay = 'Monday';
+
+function switchAllocationDay(dayStr) {
+  currentAllocationDay = dayStr;
+  document.querySelectorAll('.day-filter-btn').forEach(btn => {
+    if(btn.innerText.trim().toLowerCase() === dayStr.toLowerCase()) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+  drawAllocationChartInstance();
+}
+
+function drawAllocationChartInstance() {
+  const canvas = document.getElementById('allocationChart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  
+  if (allocationChartInstance) allocationChartInstance.destroy();
+
+  const dayData = globalAllocationData[currentAllocationDay] || [];
+  
+  const labels = dayData.map(d => d.name);
+  const totalHours = dayData.map(d => d.hours);
+  
+  const baseHours = totalHours.map(h => Math.min(h, 7.5));
+  const overHours = totalHours.map(h => Math.max(0, h - 7.5));
+
+  allocationChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Within Shift', data: baseHours, backgroundColor: '#10B981', barThickness: 24 },
+        { label: 'Over Limit', data: overHours, backgroundColor: '#EF4444', barThickness: 24 }
+      ]
+    },
+    options: {
+      indexAxis: 'y', 
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'y', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          filter: function(tooltipItem) { return tooltipItem.datasetIndex === 0; },
+          callbacks: { 
+            label: (ctx) => {
+              const total = totalHours[ctx.dataIndex];
+              return `Total Time: ${total} Hours`;
+            }
+          } 
+        },
+        annotation: {
+          annotations: {
+            shiftLimitLine: {
+              type: 'line', xMin: 7.5, xMax: 7.5,
+              borderColor: '#0A1B5F', borderWidth: 2, borderDash: [5, 5],
+              label: {
+                display: true, content: 'Shift Limit (7.5 hrs)', position: 'start',
+                backgroundColor: '#0A1B5F', color: '#fff', font: { size: 10, family: 'Poppins' }
+              }
+            }
+          }
+        }
+      },
+      scales: {
+        x: { stacked: true, beginAtZero: true, max: Math.max(...totalHours, 12) + 1, grid: { color: '#E5EFFF' } },
+        y: { stacked: true, grid: { display: false }, ticks: { font: { family: 'Poppins', size: 12, weight: '600' }, color: '#0A1B5F' } }
+      }
+    }
+  });
+}
+
+function renderTaskAllocationChart() {
+  showToastNotification("Fetching capacity and directory metrics...");
+  
+  google.script.run
+    .withSuccessHandler(res => {
+      if (!res.success) {
+        handleSystemError("Allocation Data Fetch Failed", res.message);
+        return;
+      }
+      
+      try {
+        globalAllocationData = res.chartData;
+        drawAllocationChartInstance();
+
+        const agentsGrid = document.getElementById('trainedAgentsGridUI');
+        if (agentsGrid) {
+          agentsGrid.innerHTML = '';
+          for (const [project, agents] of Object.entries(res.trainedAgents || {})) {
+            let agentsHTML = agents.map(a => `<div class="agent-tag"><span class="material-icons-round" style="font-size:14px;">person</span> ${a}</div>`).join('');
+            agentsGrid.innerHTML += `
+              <div class="project-agent-card">
+                <div class="pac-title">${project}</div>
+                <div class="pac-agents-wrapper">${agentsHTML}</div>
+              </div>
+            `;
+          }
+        }
+        showToastNotification("Metrics and Directory loaded.");
+      } catch(err) {
+        handleSystemError("Chart Render Error", err.message);
+      }
+    })
+    .withFailureHandler(err => handleSystemError("Chart Engine Connection Error", err.message))
+    .getTaskAllocationData();
+}
+
+// --- INTERACTIVE TUTORIAL LOGIC ---
+const tutorialSteps = [
+  {
+    title: "Welcome to PEX Hub v2.0",
+    desc: "This guided tour walks you through every key feature of your centralized operations console — from filing leaves to generating handoff emails. Use the Back and Next buttons to navigate at your own pace.",
+    targetId: null,
+    hint: null,
+    setup: () => switchActiveWorkspaceView('tracker')
+  },
+  {
+    title: "Step 1 — Live KPI Dashboard",
+    desc: "The three metric cards at the top always show your team's real-time pulse: total roster size, how many members are active today, and how many are on leave or off. These numbers auto-sync with the live Google Sheet database whenever you hit the Refresh button.",
+    targetId: "mainKpiStrip",
+    hint: { icon: "sync", text: "Click the sync icon in the top bar to refresh these numbers anytime" },
+    setup: () => switchActiveWorkspaceView('tracker')
+  },
+  {
+    title: "Step 2 — Attendance Tracker",
+    desc: "This roster lists every team member with real-time status pills. Click a pill (OFF, SL, P, ABS, H) to instantly log their attendance into the database. Green = Present, Red = Absent, Gray = Day Off. Members with an approved leave are automatically locked — their status shows as a badge and cannot be changed here.",
+    targetId: "unifiedRosterBoxCard",
+    positionHint: "right",
+    hint: { icon: "touch_app", text: "Tap a status pill next to a member's name to log attendance" },
+    setup: () => switchActiveWorkspaceView('tracker')
+  },
+  {
+    title: "Step 3 — Leave Filing Form",
+    desc: "To file a vacation leave: (1) Pick a target date using the date picker. (2) Choose the leave type — VL (Full Day), HD VL (Half Day), or BL (Birthday Leave). (3) Select the employee from the dropdown. Then click 'Commit Leave File'. The system syncs this to the database and locks the member's attendance for that day automatically.",
+    targetId: "vlFilingCardUI",
+    positionHint: "left",
+    hint: { icon: "event", text: "Always select the date first, then type, then employee — then commit" },
+    setup: () => switchActiveWorkspaceView('tracker')
+  },
+  {
+    title: "Step 4 — Monthly Leave Calendar",
+    desc: "Below the form, a visual calendar shows all filed leaves for the current month. Purple dots mark full-day VLs, blue marks Half-Day, amber marks Birthday Leave. Click any highlighted date cell to open a popup showing exactly who is on leave that day, including leave type and a delete option.",
+    targetId: "calendarGridBody",
+    hint: { icon: "calendar_month", text: "Click a highlighted date cell to view the leave roster for that day" },
+    setup: () => switchActiveWorkspaceView('tracker')
+  },
+  {
+    title: "Step 5 — Member Details Registry",
+    desc: "The Member Details section shows your team's organizational structure. Your Team Leader's profile is displayed prominently at the top, with contact info, shift schedule, and operational scope. Below, the full team directory lists all members — click 'View Profile' on any member to see their full employee registry details.",
+    targetId: "panelViewDemo",
+    hint: { icon: "person_search", text: "Click 'View Profile' on any team member to see their full details" },
+    setup: () => switchActiveWorkspaceView('demo')
+  },
+  {
+    title: "Step 6 — Task Allocation & Capacity",
+    desc: "This dashboard visualizes your team's logged hours against the standard 7.5-hour shift limit, clearly highlighting any overages. Alongside it is a cross-trained agent directory, mapping out exactly who is equipped to handle specific projects.",
+    targetId: "menuBtnAllocation",
+    hint: { icon: "insert_chart", text: "Click 'Task Allocation' in the sidebar to open this view" },
+    setup: () => switchActiveWorkspaceView('allocation')
+  },
+  {
+    title: "Step 7 — Project Handoffs Workspace",
+    desc: "Before going on leave, navigate here. This engine scans all active projects in the Handoffs database and maps your deliverables based on the day of your leave. It automatically assigns backup mates (POCs) for every task so nothing slips through the cracks while you're away.",
+    targetId: "menuBtnHandoff",
+    hint: { icon: "arrow_forward", text: "Click 'Project Handoffs' in the sidebar to open this section" },
+    setup: () => switchActiveWorkspaceView('tracker')
+  },
+  {
+    title: "Step 8 — Handoff Configuration",
+    desc: "To generate a handoff: (1) Select your name from the 'Target Resource' dropdown. Suggested leave dates will appear as quick chips based on your filed leaves — click one to auto-fill the date. (2) Or manually pick a date. The system then scans and loads all your active deliverables and maps backup contacts automatically.",
+    targetId: "handoffResourceUI",
+    hint: { icon: "auto_awesome", text: "Click a suggested leave chip to instantly auto-fill the date" },
+    setup: () => switchActiveWorkspaceView('handoff')
+  },
+  {
+    title: "Step 9 — Smart Email Draft Generator",
+    desc: "Once your handoffs are compiled, this panel auto-generates a formatted corporate email on the right. The Subject and Body are pre-filled. You can edit both fields directly before sending. Use the copy icon to grab the full text, or click 'Draft/Open Leave Handoff Email' to launch a pre-filled Gmail compose window instantly.",
+    targetId: "handoffDraftCardUI",
+    positionHint: "left",
+    hint: { icon: "mail", text: "Click the draft button to open a pre-filled Gmail compose window" },
+    setup: () => switchActiveWorkspaceView('handoff')
+  },
+  {
+    title: "Step 10 — SOP Library",
+    desc: "Access the new central repository for all Standard Operating Procedures directly from the Hub.",
+    targetId: "menuBtnSOP",
+    hint: { icon: "library_books", text: "Click 'SOP Library' to view procedures" },
+    setup: () => switchActiveWorkspaceView('sop')
+  },
+  {
+    title: "Step 11 — Deep Search",
+    desc: "This search bar reads the actual text inside the documents. Type a keyword to instantly find relevant SOPs without leaving the platform.",
+    targetId: "sopSearchInput",
+    positionHint: "bottom",
+    hint: { icon: "search", text: "Try searching for a process name or keyword" },
+    setup: () => switchActiveWorkspaceView('sop')
+  },
+  {
+    title: "Step 12 — Sources & Suggestions",
+    desc: "Find quick-access links to the backend Google Sheets powering this hub, as well as shortcuts to standalone automation tools like PSI Invoicing and Details Shop Invoicing. Use the feedback form at the bottom to submit bug reports, feature requests, or suggestions directly to the development pipeline.",
+    targetId: "menuBtnSources",
+    hint: { icon: "lightbulb", text: "Submit feature requests or bug reports using the feedback form here" },
+    setup: () => switchActiveWorkspaceView('sources')
+  },
+  {
+    title: "Step 13 — Dashboard Controls",
+    desc: "The top-right control cluster gives you three quick actions: toggle between Dark and Light mode (moon icon), relaunch this tour at any time (graduation cap icon), manually sync live data from the Google Sheet database (sync icon), or manually log out of your session. The current date is always displayed on the left.",
+    targetId: "topbarControlsUI",
+    hint: { icon: "school", text: "Click the graduation cap icon anytime to relaunch this tour" },
+    setup: () => switchActiveWorkspaceView('tracker')
+  }
+];
+
+let currentTutStep = 0;
+
+function launchTourFromHub() {
+  triggerTitleAnchorRoute('tracker');
+  setTimeout(() => {
+    startTutorial();
+  }, 150);
+}
+
+function startTutorial() {
+  currentTutStep = 0;
+  document.getElementById('tutorialOverlay').classList.add('active');
+  document.getElementById('tutorialTooltip').classList.add('active');
+  renderTutorialStep();
+}
+
+function endTutorial() {
+  document.getElementById('tutorialOverlay').classList.remove('active');
+  document.getElementById('tutorialTooltip').classList.remove('active');
+  clearTutorialHighlight();
+  switchActiveWorkspaceView('tracker');
+}
+
+function clearTutorialHighlight() {
+  document.querySelectorAll('.tutorial-highlight-element').forEach(el => {
+    el.classList.remove('tutorial-highlight-element');
+  });
+}
+
+function buildStepDots() {
+  const dotsEl = document.getElementById('tutStepDots');
+  if (!dotsEl) return;
+  dotsEl.innerHTML = '';
+  tutorialSteps.forEach((_, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'tut-dot' + (i === currentTutStep ? ' active' : (i < currentTutStep ? ' done' : ''));
+    dotsEl.appendChild(dot);
+  });
+}
+
+function renderTutorialStep() {
+  clearTutorialHighlight();
+  const step = tutorialSteps[currentTutStep];
+  const total = tutorialSteps.length;
+  const tooltip = document.getElementById('tutorialTooltip');
+
+  if (step.setup) step.setup();
+  tooltip.style.opacity = '0';
+  setTimeout(() => {
+    document.getElementById('tutTitleText').innerText = step.title;
+    document.getElementById('tutDescText').innerText = step.desc;
+    document.getElementById('tutProgressText').innerText = `STEP ${currentTutStep + 1} OF ${total}`;
+
+    const pct = Math.round(((currentTutStep + 1) / total) * 100);
+    const bar = document.getElementById('tutProgressBar');
+    if (bar) bar.style.width = pct + '%';
+
+    buildStepDots();
+
+    const hintEl = document.getElementById('tutActionHint');
+    if (hintEl) {
+      if (step.hint) {
+        hintEl.innerHTML = `<div class="tut-action-hint"><span class="material-icons-round">${step.hint.icon}</span>${step.hint.text}</div>`;
+      } else {
+        hintEl.innerHTML = '';
+      }
+    }
+
+    const nextBtn = document.getElementById('tutNextBtn');
+    if (nextBtn) {
+      if (currentTutStep === total - 1) {
+        nextBtn.innerHTML = `Finish <span class="material-icons-round" style="font-size:14px;">check_circle</span>`;
+      } else {
+        nextBtn.innerHTML = `Next <span class="material-icons-round" style="font-size:14px;">arrow_forward</span>`;
+      }
+    }
+
+    const prevBtn = document.getElementById('tutPrevBtn');
+    if (prevBtn) {
+      prevBtn.style.display = currentTutStep === 0 ? 'none' : 'flex';
+    }
+
+    if (step.targetId) {
+      const target = document.getElementById(step.targetId);
+      if (target) {
+        target.classList.add('tutorial-highlight-element');
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => {
+          const rect = target.getBoundingClientRect();
+          const tooltipWidth = tooltip.offsetWidth;
+          const tooltipHeight = tooltip.offsetHeight;
+          
+          let top, left;
+
+          const spaceBelow = window.innerHeight - rect.bottom;
+          const spaceAbove = rect.top;
+          const spaceLeft = rect.left;
+          const spaceRight = window.innerWidth - rect.right;
+
+          left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
+
+          let effectiveHint = step.positionHint;
+          if (window.innerWidth < 768) {
+            effectiveHint = 'top-bottom-fallback';
+          }
+
+          if (effectiveHint === 'right' && spaceRight >= tooltipWidth + 30) {
+            left = rect.right + 20;
+            top = rect.top + (rect.height / 2) - (tooltipHeight / 2);
+          } else if (effectiveHint === 'left' && spaceLeft >= tooltipWidth + 30) {
+            left = rect.left - tooltipWidth - 20;
+            top = rect.top + (rect.height / 2) - (tooltipHeight / 2);
+          } else {
+            if (spaceBelow >= tooltipHeight + 30) {
+              top = rect.bottom + 20;
+            } else if (spaceAbove >= tooltipHeight + 30) {
+              top = rect.top - tooltipHeight - 20;
+            } else {
+              top = Math.max(20, (window.innerHeight - tooltipHeight) / 2);
+            }
+          }
+
+          if (effectiveHint !== 'right' && effectiveHint !== 'left') {
+            if (left < 10) left = 10;
+            if (left + tooltipWidth > window.innerWidth - 10) {
+              left = window.innerWidth - tooltipWidth - 10;
+            }
+          }
+
+          if (effectiveHint === 'left' || effectiveHint === 'right') {
+            if (top < 10) top = 10;
+            if (top + tooltipHeight > window.innerHeight - 10) {
+              top = window.innerHeight - tooltipHeight - 10;
+            }
+          }
+
+          tooltip.style.top = `${top}px`;
+          tooltip.style.left = `${left}px`;
+          tooltip.style.bottom = 'auto';
+          tooltip.style.transform = 'none';
+          tooltip.style.opacity = '1';
+        }, 450);
+      }
+    } else {
+      tooltip.style.top = '50%';
+      tooltip.style.left = '50%';
+      tooltip.style.bottom = 'auto';
+      tooltip.style.transform = 'translate(-50%, -50%)';
+      tooltip.style.opacity = '1';
+    }
+  }, 200);
+}
+
+function nextTutorialStep() {
+  if (currentTutStep < tutorialSteps.length - 1) {
+    currentTutStep++;
+    renderTutorialStep();
+  } else {
+    endTutorial();
+  }
+}
+
+function prevTutorialStep() {
+  if (currentTutStep > 0) {
+    currentTutStep--;
+    renderTutorialStep();
+  }
+}
+
+// --- IDLE SESSION MANAGER ---
+let idleTimeInterval;
+const MAX_IDLE_TIME = 5 * 60 * 60 * 1000;
+
+function resetIdleTimer() {
+  clearTimeout(idleTimeInterval);
+  idleTimeInterval = setTimeout(executeAutoLogout, MAX_IDLE_TIME);
+}
+
+function initIdleListeners() {
+  window.onload = resetIdleTimer;
+  window.onmousemove = resetIdleTimer;
+  window.onmousedown = resetIdleTimer;
+  window.ontouchstart = resetIdleTimer;
+  window.onclick = resetIdleTimer;
+  window.onkeypress = resetIdleTimer;
+  window.addEventListener('scroll', resetIdleTimer, true);
+  resetIdleTimer();
+}
+
+function executeAutoLogout() {
+  localStorage.removeItem('pexHubAuthTime');
+  document.getElementById('mainContent').classList.remove('reveal');
+  document.getElementById('titlePage').classList.add('out');
+  document.getElementById('loginPage').classList.remove('out');
+  document.getElementById('loginPage').classList.add('active');
+  
+  document.getElementById('loginErrorContext').innerText = "Session expired due to inactivity. Please authenticate again.";
+  document.getElementById('loginErrorContext').style.color = "var(--sub)";
+  document.getElementById('executeLoginBtnUI').innerHTML = `<span class="material-icons-round" style="font-size:18px;">lock_open</span> Authenticate Workspace`;
+  document.getElementById('executeLoginBtnUI').disabled = false;
+  
+  teamRegistry = []; monthlyLeavesCache = {}; demographicsCache = {}; window.currentResourceLeaveBlocks = [];
+  
+  if (typeof google !== 'undefined' && google.script) {
+    google.script.run.logUserSessionTelemetry("SYSTEM LOGOUT: Session expired after 5 hours of inactivity");
+  }
+}
+
+function executeManualLogout() {
+  localStorage.removeItem('pexHubAuthTime');
+  document.getElementById('mainContent').classList.remove('reveal');
+  document.getElementById('titlePage').classList.add('out');
+  document.getElementById('loginPage').classList.remove('out');
+  document.getElementById('loginPage').classList.add('active');
+  
+  const errorNode = document.getElementById('loginErrorContext');
+  errorNode.innerText = "You have securely logged out.";
+  errorNode.style.color = "var(--green)";
+  const loginBtn = document.getElementById('executeLoginBtnUI');
+  loginBtn.innerHTML = `<span class="material-icons-round" style="font-size:18px;">lock_open</span> Authenticate Workspace`;
+  loginBtn.disabled = false;
+  
+  teamRegistry = []; monthlyLeavesCache = {}; demographicsCache = {}; window.currentResourceLeaveBlocks = [];
+  
+  if (typeof google !== 'undefined' && google.script) {
+    google.script.run.logUserSessionTelemetry("SYSTEM LOGOUT: User executed manual logout.");
+  }
+}
+
+// --- CORE LOGIC ---
+let teamRegistry = [];
+let monthlyLeavesCache = {};
+let demographicsCache = {};
+let currentTrackingDateStr = "";
+let cachedMonthNum = 5;
+let cachedYear = 2026;
+let targetDeletionConfigPayload = null;
+window.currentResourceLeaveBlocks = [];
+
+window.addEventListener('DOMContentLoaded', () => {
+  const lastAuthTime = localStorage.getItem('pexHubAuthTime');
+  const currentTime = Date.now();
+  
+  if (lastAuthTime && (currentTime - parseInt(lastAuthTime, 10) < 5 * 60 * 60 * 1000)) {
+    document.getElementById('loginPage').classList.remove('active');
+    document.getElementById('loginPage').classList.add('out');
+    
+    document.getElementById('titlePage').classList.remove('out');
+    setTimeout(() => document.getElementById('brandLogo').classList.add('loaded'), 150);
+    setTimeout(() => document.getElementById('introEyebrow').classList.add('loaded'), 350);
+    setTimeout(() => document.querySelector('.splash-title').classList.add('loaded'), 500);
+    setTimeout(() => document.getElementById('introSub').classList.add('loaded'), 700);
+    setTimeout(() => document.getElementById('titleMenuControls').classList.add('loaded'), 900);
+    setTimeout(() => {
+      const ind = document.getElementById('scrollIndicator');
+      if(ind) ind.classList.add('loaded');
+    }, 1200);
+    
+    initIdleListeners();
+    loadSpreadsheetData();
+  } else {
+    localStorage.removeItem('pexHubAuthTime');
+  }
+});
+
+function initiateCorporateLogin() {
+  const btn = document.getElementById('executeLoginBtnUI');
+  const errorNode = document.getElementById('loginErrorContext');
+  
+  btn.innerHTML = `<span class="material-icons-round spinning-icon" style="font-size:18px;">sync</span> Authenticating...`;
+  btn.disabled = true;
+  errorNode.innerText = "";
+  
+  google.script.run
+    .withSuccessHandler(res => {
+      if (res.authorized) {
+        localStorage.setItem('pexHubAuthTime', Date.now().toString());
+        
+        document.getElementById('loginPage').classList.remove('active');
+        document.getElementById('loginPage').classList.add('out');
+        
+        document.getElementById('titlePage').classList.remove('out');
+        setTimeout(() => document.getElementById('brandLogo').classList.add('loaded'), 150);
+        setTimeout(() => document.getElementById('introEyebrow').classList.add('loaded'), 350);
+        setTimeout(() => document.querySelector('.splash-title').classList.add('loaded'), 500);
+        setTimeout(() => document.getElementById('introSub').classList.add('loaded'), 700);
+        setTimeout(() => document.getElementById('titleMenuControls').classList.add('loaded'), 900);
+        setTimeout(() => {
+          const ind = document.getElementById('scrollIndicator');
+          if(ind) ind.classList.add('loaded');
+        }, 1200);
+        
+        initIdleListeners();
+        loadSpreadsheetData();
+      } else {
+        btn.innerHTML = `<span class="material-icons-round" style="font-size:18px;">gpp_bad</span> Access Restricted`;
+        errorNode.innerText = "Unauthorized Domain Blocked: " + res.emailAttempt;
+        errorNode.style.color = "var(--red)";
+      }
+    })
+    .withFailureHandler(err => {
+      btn.innerHTML = `<span class="material-icons-round" style="font-size:18px;">lock_open</span> Try Again`;
+      btn.disabled = false;
+      errorNode.innerText = `Server Error: ${err.message}`;
+    })
+    .authenticateUser();
+}
+
+function loadSpreadsheetData() {
+  if (typeof google !== 'undefined' && google.script) {
+    google.script.run
+      .withSuccessHandler(renderAttendanceDashboard)
+      .withFailureHandler((err) => { handleSystemError("Database Sync Failure", err.message); })
+      .getTodayAttendanceData();
+      // Inside renderAttendanceDashboard in JSscript_2.txt:
+const startDateInput = document.getElementById('formLeaveStartDateInput');
+if (startDateInput && !startDateInput.value) startDateInput.value = data.inputDefaultDate;
+  }
+}
+
+function triggerTitleAnchorRoute(destinationSectionView) {
+  switchActiveWorkspaceView(destinationSectionView);
+  setTimeout(() => {
+    document.getElementById('titlePage').classList.add('out');
+    document.getElementById('mainContent').classList.add('reveal');
+  }, 50);
+}
+
+function returnBackToTitlePageHub() {
+  document.getElementById('titlePage').classList.remove('out');
+  document.getElementById('mainContent').classList.remove('reveal');
+}
+
+// --- UPDATE VIEW SWITCHER ---
+function switchActiveWorkspaceView(targetView) {
+  const btnTracker    = document.getElementById('menuBtnTracker');
+  const btnDemo       = document.getElementById('menuBtnDemo');
+  const btnHandoff    = document.getElementById('menuBtnHandoff');
+  const btnSources    = document.getElementById('menuBtnSources');
+  const btnAllocation = document.getElementById('menuBtnAllocation');
+  const btnSOP        = document.getElementById('menuBtnSOP');
+  const btnKPI        = document.getElementById('menuBtnKPI'); 
+
+  const panelTracker    = document.getElementById('panelViewTracker');
+  const panelDemo       = document.getElementById('panelViewDemo');
+  const panelHandoff    = document.getElementById('panelViewHandoff');
+  const panelSources    = document.getElementById('panelViewSources');
+  const panelAllocation = document.getElementById('panelViewAllocation');
+  const panelSOP        = document.getElementById('panelViewSOP');
+  const panelKPI        = document.getElementById('panelViewKPI'); 
+
+  const headerTitle  = document.getElementById('workspaceHeaderTitle');
+
+  [btnTracker, btnDemo, btnHandoff, btnSources, btnAllocation, btnSOP, btnKPI].forEach(b => { if(b) b.classList.remove('active'); });
+  [panelTracker, panelDemo, panelHandoff, panelSources, panelAllocation, panelSOP, panelKPI].forEach(p => { if(p) p.classList.remove('active-view'); });
+
+  document.getElementById('mainKpiStrip').style.display = (['handoff','sources','allocation','sop','kpi'].includes(targetView)) ? 'none' : 'grid';
+
+  requestAnimationFrame(() => {
+    if (targetView === 'tracker') {
+      if(btnTracker) btnTracker.classList.add('active');
+      if(panelTracker) panelTracker.classList.add('active-view');
+      headerTitle.innerText = "Attendance & VL";
+    } else if (targetView === 'handoff') {
+      if(btnHandoff) btnHandoff.classList.add('active');
+      if(panelHandoff) panelHandoff.classList.add('active-view');
+      headerTitle.innerText = "Project Handoffs";
+      if (typeof teamRegistry !== 'undefined' && teamRegistry && teamRegistry.length > 0) populateHandoffDropdowns();
+    } else if (targetView === 'sources') {
+      if(btnSources) btnSources.classList.add('active');
+      if(panelSources) panelSources.classList.add('active-view');
+      headerTitle.innerText = "Sources & Suggestions";
+    } else if (targetView === 'allocation') {
+      if(btnAllocation) btnAllocation.classList.add('active');
+      if(panelAllocation) panelAllocation.classList.add('active-view');
+      headerTitle.innerText = "Task Allocation";
+      renderTaskAllocationChart();
+    } else if (targetView === 'sop') {
+      if(btnSOP) btnSOP.classList.add('active');
+      if(panelSOP) panelSOP.classList.add('active-view');
+      headerTitle.innerText = "SOP Library";
+      loadSOPLibrary();
+    } else if (targetView === 'kpi') {
+      if(btnKPI) btnKPI.classList.add('active');
+      if(panelKPI) panelKPI.classList.add('active-view');
+      headerTitle.innerText = "KPI Process";
+      loadKPILibrary();
+    } else {
+      if(btnDemo) btnDemo.classList.add('active');
+      if(panelDemo) panelDemo.classList.add('active-view');
+      headerTitle.innerText = "Member Registry";
+    }
+  });
+}
+
+// --- ACCORDION DIRECTORY ANIMATED RENDER ---
+function renderTaskAllocationChart() {
+  showToastNotification("Fetching capacity and directory metrics...");
+  
+  google.script.run
+    .withSuccessHandler(res => {
+      if (!res.success) {
+        handleSystemError("Allocation Data Fetch Failed", res.message);
+        return;
+      }
+      
+      try {
+        globalAllocationData = res.chartData;
+        drawAllocationChartInstance();
+
+        const agentsGrid = document.getElementById('trainedAgentsGridUI');
+        if (agentsGrid) {
+          agentsGrid.innerHTML = '';
+          let accordionIndex = 0;
+
+          for (const [project, agents] of Object.entries(res.trainedAgents || {})) {
+            let agentsHTML = agents.map(a => `<div class="agent-tag"><span class="material-icons-round" style="font-size:14px;">person</span> ${a}</div>`).join('');
+            
+            agentsGrid.innerHTML += `
+              <div class="accordion-project-card">
+                <button class="accordion-header" onclick="toggleAccordionItem(${accordionIndex})">
+                  <div class="pac-title-text">${project}</div>
+                  <div class="accordion-right-meta">
+                    <span class="agent-count-badge">${agents.length} Trained</span>
+                    <span class="material-icons-round accordion-chevron-icon" id="chevron-${accordionIndex}">expand_more</span>
+                  </div>
+                </button>
+                <div class="accordion-content-panel" id="accordion-panel-${accordionIndex}">
+                  <div class="pac-agents-wrapper">${agentsHTML}</div>
+                </div>
+              </div>
+            `;
+            accordionIndex++;
+          }
+        }
+        showToastNotification("Metrics and Directory loaded.");
+      } catch(err) {
+        handleSystemError("Chart Render Error", err.message);
+      }
+    })
+    .withFailureHandler(err => handleSystemError("Chart Engine Connection Error", err.message))
+    .getTaskAllocationData();
+}
+
+function toggleAccordionItem(index) {
+  const panel = document.getElementById(`accordion-panel-${index}`);
+  const chevron = document.getElementById(`chevron-${index}`);
+  
+  if (!panel) return;
+  const isOpen = panel.classList.contains('expanded');
+
+  if (isOpen) {
+    panel.classList.remove('expanded');
+    chevron.style.transform = 'rotate(0deg)';
+  } else {
+    panel.classList.add('expanded');
+    chevron.style.transform = 'rotate(180deg)';
+  }
+}
+
+// --- KPI MONITORING LOGIC ---
+let cachedKPIData = [];
+let currentKPISortMode = 'name';
+
+function loadKPILibrary() {
+  const container = document.getElementById('kpiListContainer');
+  if (cachedKPIData.length === 0) {
+     container.innerHTML = `<div style="text-align:center; margin-top:40px; color:var(--sub);"><span class="material-icons-round spinning-icon" style="font-size:24px;">sync</span><br><br>Accessing KPI Records...</div>`;
+  }
+  
+  google.script.run
+    .withSuccessHandler((res) => { 
+      if (res.success) { 
+        cachedKPIData = res.data; 
+        const savedView = localStorage.getItem('pexHubKpiView') || 'list';
+        setKPIView(savedView);
+        renderKPIList(cachedKPIData); 
+      } else {
+        container.innerHTML = `<div style="text-align:center; padding: 40px; color:var(--red); font-weight:600;">⚠️ Error loading KPIs: ${res.message}</div>`;
+      }
+    })
+    .withFailureHandler((err) => handleSystemError("KPI Connection Error", err.message))
+    .getKPIDataForWebApp();
+}
+
+function handleKPISort() {
+  currentKPISortMode = document.getElementById('kpiSortSelect').value;
+  handleKPISearch(); 
+}
+
+function renderKPIList(dataArray) {
+  const container = document.getElementById('kpiListContainer');
+  container.innerHTML = "";
+  
+  if(dataArray.length === 0) {
+    container.innerHTML = "<div style='text-align:center; padding: 40px; color:var(--sub);'>No KPI documents found.</div>";
+    return;
+  }
+
+  const sortedArray = dataArray.slice().sort((a, b) => {
+    if (currentKPISortMode === 'name') return cleanSOPTitle(a.title).localeCompare(cleanSOPTitle(b.title));
+    if (currentKPISortMode === 'updated') return new Date(b.lastUpdatedBy).getTime() - new Date(a.lastUpdatedBy).getTime();
+    if (currentKPISortMode === 'created') return new Date(b.createdDate).getTime() - new Date(a.createdDate).getTime();
+    return 0;
+  });
+
+  sortedArray.forEach((kpi) => {
+    const originalIndex = cachedKPIData.indexOf(kpi); 
+    const displayTitle = cleanSOPTitle(kpi.title);
+    const color = getAvatarColor(kpi.author);
+    
+    const card = document.createElement('div');
+    card.className = "sop-card";
+    card.onclick = () => openKPIDrawer(originalIndex);
+    
+    card.innerHTML = `
+      <div class="sop-doc-icon" style="background-color: ${color}">
+        <span class="material-icons-round" style="font-size:24px;">analytics</span>
+      </div>
+      <div>
+        <h4 style="margin:0; font-size:14px; color:var(--secondary);">${displayTitle}</h4>
+        <small style="color: var(--sub); font-size:10px; font-weight:700; text-transform:uppercase;">Owner: ${kpi.author} | Updated: ${kpi.lastUpdatedBy}</small>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function handleKPISearch() {
+  const query = document.getElementById('kpiSearchInput').value.toLowerCase().trim();
+  if (!query) { renderKPIList(cachedKPIData); return; }
+  
+  const filtered = cachedKPIData.filter(kpi => cleanSOPTitle(kpi.title).toLowerCase().includes(query) || kpi.searchIndex.includes(query));
+  renderKPIList(filtered);
+}
+
+function setKPIView(mode) {
+  const container = document.getElementById('kpiListContainer');
+  const btnList = document.getElementById('btnKPIListView');
+  const btnGrid = document.getElementById('btnKPIGridView');
+  
+  if (!container || !btnList || !btnGrid) return;
+
+  if (mode === 'grid') {
+    container.classList.add('grid-view');
+    btnGrid.classList.add('active');
+    btnList.classList.remove('active');
+  } else {
+    container.classList.remove('grid-view');
+    btnList.classList.add('active');
+    btnGrid.classList.remove('active');
+  }
+  localStorage.setItem('pexHubKpiView', mode);
+}
+
+// Title Cleaner Helper (Strips extensions, prefixes like 'pex-', hyphens, and underscores)
+function cleanKPITitle(title) {
+  if (!title) return "";
+  let clean = title.replace(/\.[^/.]+$/, ""); // Remove extension (.pdf, .docx, etc)
+  clean = clean.replace(/^(?:pex|kpi|sop|vlc|draft)[_\-\s]*/i, ""); // Remove prefixes
+  clean = clean.replace(/[_\-]+/g, " "); // Replace hyphens/underscores with spaces
+  return clean.replace(/\w\S*/g, txt => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()).trim();
+}
+
+// Updated KPI Drawer Opener (Wider Default Width)
+function openKPIDrawer(index) {
+  const kpi = cachedKPIData[index];
+  
+  document.getElementById('kpiDrawerTitle').innerText = cleanKPITitle(kpi.title);
+  document.getElementById('kpiDrawerAuthor').innerText = kpi.author;
+  
+  const avatarNode = document.getElementById('kpiDrawerAuthorAvatar');
+  avatarNode.innerHTML = '<span class="material-icons-round" style="font-size:14px;">person</span>';
+  avatarNode.style.backgroundColor = getAvatarColor(kpi.author);
+  
+  document.getElementById('kpiDrawerCreated').innerText = kpi.createdDate !== "N/A" ? kpi.createdDate : "Unknown";
+  document.getElementById('kpiDrawerUpdated').innerText = kpi.lastUpdatedBy !== "N/A" ? kpi.lastUpdatedBy : "Unknown";
+  document.getElementById('kpiDrawerOpenDocsBtn').href = kpi.url;
+  document.getElementById('kpiDrawerIframe').src = kpi.previewIframe;
+  
+  const drawer = document.getElementById('kpiDrawer');
+  // Set default width to 80% of screen or minimum 850px for clear reading
+  const optimalWidth = Math.max(850, window.innerWidth * 0.75);
+  drawer.style.width = optimalWidth + 'px'; 
+  drawer.classList.add('open');
+}
+
+// Updated KPI List Renderer using cleanKPITitle
+function renderKPIList(dataArray) {
+  const container = document.getElementById('kpiListContainer');
+  container.innerHTML = "";
+  
+  if(dataArray.length === 0) {
+    container.innerHTML = "<div style='text-align:center; padding: 40px; color:var(--sub);'>No KPI documents found.</div>";
+    return;
+  }
+
+  const sortedArray = dataArray.slice().sort((a, b) => {
+    if (currentKPISortMode === 'name') return cleanKPITitle(a.title).localeCompare(cleanKPITitle(b.title));
+    if (currentKPISortMode === 'updated') return new Date(b.lastUpdatedBy).getTime() - new Date(a.lastUpdatedBy).getTime();
+    if (currentKPISortMode === 'created') return new Date(b.createdDate).getTime() - new Date(a.createdDate).getTime();
+    return 0;
+  });
+
+  sortedArray.forEach((kpi) => {
+    const originalIndex = cachedKPIData.indexOf(kpi); 
+    const displayTitle = cleanKPITitle(kpi.title);
+    const color = getAvatarColor(kpi.author);
+    
+    const card = document.createElement('div');
+    card.className = "sop-card";
+    card.onclick = () => openKPIDrawer(originalIndex);
+    
+    card.innerHTML = `
+      <div class="sop-doc-icon" style="background-color: ${color}">
+        <span class="material-icons-round" style="font-size:24px;">analytics</span>
+      </div>
+      <div>
+        <h4 style="margin:0; font-size:14px; color:var(--secondary);">${displayTitle}</h4>
+        <small style="color: var(--sub); font-size:10px; font-weight:700; text-transform:uppercase;">Owner: ${kpi.author} | Updated: ${kpi.lastUpdatedBy}</small>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function closeKPIDrawer() {
+  document.getElementById('kpiDrawer').classList.remove('open');
+  setTimeout(() => { document.getElementById('kpiDrawerIframe').src = ""; }, 400);
+}
+function toggleSidebarMenuExpansion() {
+  const shellFrame = document.getElementById('appShellFrame');
+  if (shellFrame.classList.contains('sidebar-collapsed')) {
+    shellFrame.classList.remove('sidebar-collapsed');
+    document.getElementById('collapseIconToggleNode').innerText = "menu_open";
+  } else {
+    shellFrame.classList.add('sidebar-collapsed');
+    document.getElementById('collapseIconToggleNode').innerText = "menu";
+  }
+}
+
+function toggleDashboardThemeEngine() {
+  const currentTheme = document.documentElement.getAttribute('data-theme');
+  const iconNode = document.getElementById('themeIconNode');
+  if (currentTheme === 'dark') {
+    document.documentElement.removeAttribute('data-theme');
+    iconNode.innerText = "dark_mode";
+    showToastNotification("Switched to Light Theme.");
+  } else {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    iconNode.innerText = "light_mode";
+    showToastNotification("Switched to Dark Theme.");
+  }
+}
+
+function triggerTelemetryRefreshAction() {
+  const syncBtn = document.getElementById('refreshDataBtnNode');
+  syncBtn.classList.add('spinning-icon');
+  showToastNotification("Synchronizing live sheet parameters...");
+  google.script.run
+    .withSuccessHandler((data) => {
+      renderAttendanceDashboard(data);
+      setTimeout(() => {
+        syncBtn.classList.remove('spinning-icon');
+        showToastNotification("Database metrics synced successfully.");
+      }, 700);
+    })
+    .withFailureHandler((err) => {
+      syncBtn.classList.remove('spinning-icon');
+      handleSystemError("Refresh Connection Dropped", err.message);
+    })
+    .getTodayAttendanceData();
+}
+
+function renderAttendanceDashboard(data) {
+  if (data.authorized === false) {
+     document.getElementById('accessDeniedOverlay').classList.add('active');
+     document.getElementById('deniedEmailContext').innerText = "Attempted Login: " + data.emailAttempt;
+     return;
+  }
+
+  document.getElementById('currentDate').innerText = data.dateString;
+  const startDateInput = document.getElementById('formLeaveStartDateInput');
+if (startDateInput && !startDateInput.value) startDateInput.value = data.inputDefaultDate;
+
+  teamRegistry          = data.roster;
+  monthlyLeavesCache    = data.calendarLeaveMap;
+  demographicsCache     = data.demographicsMap;
+  currentTrackingDateStr = data.targetDayStr;
+  cachedMonthNum        = data.currentMonthNum;
+  cachedYear            = data.currentYear;
+  document.getElementById('rosterBoxHeaderTitle').innerText = `Team Members Attendance Track (${currentTrackingDateStr})`;
+
+  const teamRosterContainer     = document.getElementById('teamRosterContainer');
+  const formEmployeeSelect      = document.getElementById('formEmployeeSelect');
+  const demographicsGridContainer = document.getElementById('demographicsGridContainer');
+
+  teamRosterContainer.innerHTML = '';
+  demographicsGridContainer.innerHTML = '';
+  formEmployeeSelect.innerHTML = '<option value="" disabled selected>Select Name</option>';
+
+  let presentCount = 0; let leaveCount = 0;
+  teamRegistry.forEach(member => {
+    const rawStatus = member.rawStatus.trim();
+    const code = rawStatus.toUpperCase();
+    
+    const optionNode = document.createElement('option');
+    optionNode.value = member.rowIndex; 
+    optionNode.innerText = member.name;
+    formEmployeeSelect.appendChild(optionNode);
+
+    if (code === 'P' || code === 'H') presentCount++;
+    if (['OFF','VL','BL','SL'].includes(code) || code.includes('HD') || code.includes('HALF')) leaveCount++;
+
+    const rowItem = document.createElement('div');
+    rowItem.className = 'roster-row-item';
+    rowItem.id = `roster-row-${member.rowIndex}`;
+
+    const isAutomatedLeave = code.startsWith('VL') || code.includes('HD') || code.includes('HALF') || code.startsWith('BL');
+    let controlLayoutBlock = '';
+
+    if (isAutomatedLeave) {
+      let badgeClass = 'lock-vl'; 
+      let descriptiveText = rawStatus; // Displays 'HDVL 1st half' or 'HD VL 2nd half' directly
+      
+      if (code.includes('HD') || code.includes('HALF')) { 
+        badgeClass = 'lock-hdvl'; 
+      } else if (code.startsWith('BL')) { 
+        badgeClass = 'lock-bl';   
+        descriptiveText = 'BL'; 
+      }
+      controlLayoutBlock = `<div class="automated-leave-lock ${badgeClass}">🔒 Filed: ${descriptiveText}</div>`;
+    } else {
+      controlLayoutBlock = `
+        <div class="card-action-controls-right">
+          <button class="action-pill b-off ${code==='OFF'?'active':''}" onclick="commitStatusChange(this,'${member.name}',${member.rowIndex},'OFF')">OFF</button>
+          <button class="action-pill b-sl ${code==='SL'?'active':''}"  onclick="commitStatusChange(this,'${member.name}',${member.rowIndex},'SL')">SL</button>
+          <button class="action-pill b-p ${code==='P'?'active':''}"    onclick="commitStatusChange(this,'${member.name}',${member.rowIndex},'P')">P</button>
+          <button class="action-pill b-abs ${code==='ABS'?'active':''}" onclick="commitStatusChange(this,'${member.name}',${member.rowIndex},'ABS')">ABS</button>
+          <button class="action-pill b-h ${code==='H'?'active':''}"    onclick="commitStatusChange(this,'${member.name}',${member.rowIndex},'H')">H</button>
+        </div>`;
+    }
+
+    const initials = member.initials || member.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
+    rowItem.innerHTML = `
+      <div class="member-profile-left">
+        <div class="roster-avatar">${initials}</div>
+        <div class="member-name">${member.name}</div>
+      </div>
+      ${controlLayoutBlock}`;
+    teamRosterContainer.appendChild(rowItem);
+
+    const orgNode = document.createElement('div');
+    orgNode.className = 'org-member-node';
+    const nameParts = member.name.split(' ');
+    const firstName = nameParts[0];
+    const lastName = nameParts.slice(1).join(' ');
+    orgNode.innerHTML = `
+      <div class="member-avatar">${initials}</div>
+      <div class="member-name">${firstName}<br>${lastName}</div>
+      <button class="btn-view-profile-micro" onclick="triggerProfileModalView('${member.name}')">View Details</button>
+    `;
+    demographicsGridContainer.appendChild(orgNode);
+  });
+
+  const totalRosterCount = teamRegistry.length;
+  document.getElementById('rosterCountCard').innerText    = totalRosterCount;
+  document.getElementById('attendanceCountCard').innerText = presentCount;
+  document.getElementById('attendanceBarCard').style.width = (totalRosterCount > 0 ? Math.round((presentCount/totalRosterCount)*100) : 0) + "%";
+  document.getElementById('leaveCountCard').innerText     = leaveCount;
+  document.getElementById('leaveBarCard').style.width     = (totalRosterCount > 0 ? Math.round((leaveCount/totalRosterCount)*100) : 0) + "%";
+
+  buildVisualCalendarModule();
+  
+  if (typeof populateHandoffDropdowns === "function") {
+    populateHandoffDropdowns();
+  }
+}
+function buildVisualCalendarModule() {
+  const gridBody   = document.getElementById('calendarGridBody');
+  const monthLabel = document.getElementById('calendarMonthLabel');
+  gridBody.innerHTML = '';
+  const shorthandMonths = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  monthLabel.innerText = `${["January","February","March","April","May","June","Jul","August","September","October","November","December"][cachedMonthNum]} ${cachedYear}`;
+
+  ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].forEach(name => {
+    const label = document.createElement('div');
+    label.className = 'calendar-day-label'; label.innerText = name;
+    gridBody.appendChild(label);
+  });
+  const firstDayIndex     = new Date(cachedYear, cachedMonthNum, 1).getDay();
+  const totalDaysInMonth  = new Date(cachedYear, cachedMonthNum + 1, 0).getDate();
+  for (let s = 0; s < firstDayIndex; s++) gridBody.appendChild(document.createElement('div'));
+  for (let day = 1; day <= totalDaysInMonth; day++) {
+    const cell = document.createElement('div');
+    cell.className = 'calendar-cell';
+    const dayNumberNode = document.createElement('span');
+    dayNumberNode.className = 'day-number'; dayNumberNode.innerText = day;
+    cell.appendChild(dayNumberNode);
+
+    if ([0,6].includes(new Date(cachedYear, cachedMonthNum, day).getDay())) cell.classList.add('weekend-rest-day');
+    const currentIterationDayToken = day + "-" + shorthandMonths[cachedMonthNum];
+    const dayActiveLeavesArray = monthlyLeavesCache[currentIterationDayToken];
+    if (dayActiveLeavesArray && dayActiveLeavesArray.length > 0) {
+      cell.classList.add('has-active-leaves');
+      const dotTrack = document.createElement('div');
+      dotTrack.className = 'leave-indicator-dot-track';
+      dayActiveLeavesArray.forEach(leaveInfo => {
+        const dot = document.createElement('div');
+        dot.className = 'leave-micro-dot';
+        const typeUpper = leaveInfo.type.toUpperCase();
+        if (typeUpper.includes('HD') || typeUpper.includes('HALF')) dot.classList.add('type-hdvl');
+        else if (typeUpper.startsWith('BL')) dot.classList.add('type-bl');
+        dotTrack.appendChild(dot);
+      });
+      cell.appendChild(dotTrack);
+      cell.onclick = () => triggerCalendarModalView(currentIterationDayToken, dayActiveLeavesArray);
+    }
+    gridBody.appendChild(cell);
+  }
+}
+function toggleCalendarModal(shouldOpen) {
+  document.getElementById('calendarModal').classList[shouldOpen ? 'add' : 'remove']('active');
+  document.body.classList[shouldOpen ? 'add' : 'remove']('modal-active-lock');
+}
+function toggleProfileModal(shouldOpen) {
+  document.getElementById('profileModal').classList[shouldOpen ? 'add' : 'remove']('active');
+  document.body.classList[shouldOpen ? 'add' : 'remove']('modal-active-lock');
+}
+function toggleSproutModal(shouldOpen) {
+  document.getElementById('sproutComplianceModal').classList[shouldOpen ? 'add' : 'remove']('active');
+  document.body.classList[shouldOpen ? 'add' : 'remove']('modal-active-lock');
+}
+function toggleDeleteConfirmModal(shouldOpen) {
+  document.getElementById('deleteConfirmModal').classList[shouldOpen ? 'add' : 'remove']('active');
+  document.body.classList[shouldOpen ? 'add' : 'remove']('modal-active-lock');
+}
+
+function triggerCalendarModalView(dateToken, leavesRosterArray) {
+  const dateLabel    = document.getElementById('modalTargetDateLabel');
+  const rosterContent = document.getElementById('modalRosterContentContainer');
+  dateLabel.innerText = `Filed Leaves Matrix — ${dateToken}`;
+  rosterContent.innerHTML = '';
+  leavesRosterArray.forEach(leave => {
+    const row = document.createElement('div');
+    row.className = `modal-roster-item type-${leave.type.toLowerCase()}`;
+    let labelString = leave.type === 'HD VL' ? 'Half Day VL' : (leave.type === 'BL' ? 'Birthday Leave' : 'Vacation Leave');
+    row.innerHTML = `
+      <span class="modal-member-name">${leave.name}</span>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span class="modal-leave-tag">${labelString} (${leave.type})</span>
+        <button class="modal-action-delete-leave-trigger-btn" onclick="stageLeaveDeletionRequest('${leave.name}',${leave.rowIndex},'${dateToken}','${leave.type}')" title="Delete Leave">
+          <span class="material-icons-round" style="font-size:17px;">delete_forever</span>
+        </button>
+      </div>`;
+    rosterContent.appendChild(row);
+  });
+  toggleCalendarModal(true);
+}
+
+function stageLeaveDeletionRequest(employeeName, rowIndex, dateToken, typeCode) {
+  targetDeletionConfigPayload = { rowIndex, dateToken, employeeName, leaveType: typeCode };
+  const textWarningNode = document.getElementById('deleteModalWarningTextBody');
+  textWarningNode.innerHTML = `You are about to delete the filed <strong>${typeCode}</strong> leave for <strong>${employeeName}</strong> on <strong>${dateToken}</strong>.<br><span style="color:var(--red);font-size:11px;font-weight:600;margin-top:6px;display:inline-block;">This will wipe their tracking cell completely blank.</span>`;
+  toggleCalendarModal(false);
+  setTimeout(() => toggleDeleteConfirmModal(true), 150);
+}
+
+function executeLeaveDeletionTransaction() {
+  if (!targetDeletionConfigPayload) return;
+  const payload   = targetDeletionConfigPayload;
+  const deleteBtn = document.getElementById('executeDeleteBtnNode');
+  deleteBtn.innerText = "Deleting...";
+  deleteBtn.disabled  = true;
+  google.script.run
+    .withSuccessHandler((response) => {
+      deleteBtn.innerText = "Delete Leave";
+      deleteBtn.disabled  = false;
+      toggleDeleteConfirmModal(false);
+      showToastNotification(`Successfully removed leave block for ${payload.employeeName} on ${response.clearedDate}.`);
+      targetDeletionConfigPayload = null;
+      loadSpreadsheetData();
+    })
+    .withFailureHandler((err) => {
+      deleteBtn.innerText = "Delete Leave";
+      deleteBtn.disabled  = false;
+      handleSystemError("Error Processing Cell Clearance", err.message);
+    })
+    .deleteOfficialLeave(payload.rowIndex, payload.dateToken, payload.employeeName);
+}
+
+function triggerProfileModalView(employeeName) {
+  const nameLabel = document.getElementById('modalProfileNameLabel');
+  
+  const gridBody  = document.getElementById('modalProfileGridBody');
+  nameLabel.innerText = `${employeeName} — Corporate Profile`;
+  gridBody.innerHTML  = '';
+
+  const datasetFieldsArray = demographicsCache[employeeName];
+  if (!datasetFieldsArray || datasetFieldsArray.length === 0) {
+    gridBody.innerHTML = `<div style="padding:20px;color:var(--sub);text-align:center;width:100%;">No linked profile record found.</div>`;
+  } else {
+    datasetFieldsArray.forEach(field => {
+      const fieldNode = document.createElement('div');
+      fieldNode.className = 'profile-meta-field';
+      fieldNode.innerHTML = `<span class="field-label-text">${field.label}</span><span class="field-value-text">${field.value}</span>`;
+      gridBody.appendChild(fieldNode);
+    });
+  }
+  toggleProfileModal(true);
+}
+
+function closeCalendarModal(event) { if (event.target.id === 'calendarModal') toggleCalendarModal(false); }
+
+function commitStatusChange(buttonElement, employeeName, sheetRowIndex, rawStatusCode) {
+  const targetRow = document.getElementById(`roster-row-${sheetRowIndex}`);
+  if (targetRow) {
+    targetRow.querySelectorAll('.action-pill').forEach(btn => btn.classList.remove('active'));
+    buttonElement.classList.add('active');
+  }
+  
+  showToastNotification(`Processing update for ${employeeName}...`);
+  
+  if (typeof google !== 'undefined' && google.script) {
+    google.script.run
+      .withSuccessHandler((response) => {
+        showToastNotification(`Successfully logged ${employeeName} as [${response.savedValue}] for ${response.savedDate}!`);
+        loadSpreadsheetData();
+      })
+      .withFailureHandler((err) => {
+        handleSystemError("Attendance Update Failed", err.message);
+      })
+      .updateStatus(sheetRowIndex, rawStatusCode, null, employeeName);
+  }
+}
+// Toggle HDVL Shift Segment Dropdown visibility
+function toggleShiftHalfDropdown() {
+  const leaveType = document.getElementById('formLeaveTypeSelect').value;
+  const shiftGroup = document.getElementById('shiftHalfGroup');
+  if (shiftGroup) {
+    shiftGroup.style.display = (leaveType === 'HDVL') ? 'block' : 'none';
+  }
+}
+function submitOfficialLeaveForm() {
+  const startDateInput   = document.getElementById('formLeaveStartDateInput');
+  const endDateInput     = document.getElementById('formLeaveEndDateInput');
+  const employeeSelect   = document.getElementById('formEmployeeSelect');
+  const leaveSelect      = document.getElementById('formLeaveTypeSelect');
+  const shiftSelect      = document.getElementById('formShiftHalfSelect');
+  
+  const selectedStartDate = startDateInput.value;
+  const selectedEndDate   = endDateInput.value;
+  const selectedRowIndex = employeeSelect.value;
+  const selectedEmployeeName = employeeSelect.options[employeeSelect.selectedIndex].text;
+  let targetLeaveCode    = leaveSelect.value;
+
+  if (targetLeaveCode === 'HDVL' && shiftSelect) {
+     targetLeaveCode = shiftSelect.value;
+  }
+
+  if (!selectedStartDate || !selectedRowIndex) { 
+    alert("Please select a Start Date and Employee Name."); 
+    return;
+  }
+
+  const submitBtn = document.querySelector('.file-submit-btn');
+  submitBtn.innerHTML = `<span class="material-icons-round spinning-icon" style="font-size:14px; vertical-align:middle;">sync</span> Recording Leave...`;
+  submitBtn.disabled = true;
+
+  showToastNotification(`Filing ${targetLeaveCode} for ${selectedEmployeeName}...`);
+
+  if (typeof google !== 'undefined' && google.script) {
+    google.script.run
+      .withSuccessHandler((res) => {
+        submitBtn.innerHTML = `Commit Leave File`;
+        submitBtn.disabled = false;
+        
+        document.getElementById('statusToast').classList.remove('active');
+        toggleSproutModal(true); 
+        loadSpreadsheetData();
+      })
+      .withFailureHandler((err) => {
+        submitBtn.innerHTML = `Commit Leave File`;
+        submitBtn.disabled = false;
+        handleSystemError("Filing Dropped", err.message);
+      })
+      .updateStatusBatch(Number(selectedRowIndex), targetLeaveCode, selectedStartDate, selectedEndDate, selectedEmployeeName);
+  }
+}
+// --- PROJECT HANDOFFS LOGIC ---
+function populateHandoffDropdowns() {
+  const select = document.getElementById('handoffResourceUI');
+  select.innerHTML = '<option value="" disabled selected>Select Employee Name</option>';
+  teamRegistry.forEach(member => {
+    const opt = document.createElement('option');
+    opt.value = member.name;
+    opt.innerText = member.name;
+    select.appendChild(opt);
+  });
+  const dateInput = document.getElementById('handoffDateUI');
+  if(!dateInput.value && document.getElementById('formLeaveDateInput').value) {
+    dateInput.value = document.getElementById('formLeaveDateInput').value;
+  }
+}
+
+function getUserLeaveBlocks(name) {
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const leaveDates = [];
+  for (const [dayToken, leaves] of Object.entries(monthlyLeavesCache)) {
+    if (leaves.some(l => l.name === name)) {
+      const parts = dayToken.split('-');
+      const day = parseInt(parts[0], 10);
+      const monthIdx = months.findIndex(m => m.toLowerCase() === parts[1].toLowerCase());
+      const d = new Date(cachedYear, monthIdx, day);
+      leaveDates.push(d);
+    }
+  }
+  leaveDates.sort((a,b) => a - b);
+  if (leaveDates.length === 0) return [];
+
+  const blocks = [];
+  let currentBlock = [leaveDates[0]];
+  
+  for (let i = 1; i < leaveDates.length; i++) {
+    const prev = currentBlock[currentBlock.length - 1];
+    const curr = leaveDates[i];
+    
+    let allOff = true;
+    let tempDate = new Date(prev);
+    tempDate.setDate(tempDate.getDate() + 1);
+    tempDate.setHours(0,0,0,0);
+    const targetCurr = new Date(curr);
+    targetCurr.setHours(0,0,0,0);
+    
+    while (tempDate < targetCurr) {
+      if (tempDate.getDay() !== 0 && tempDate.getDay() !== 6) {
+        allOff = false;
+        break;
+      }
+      tempDate.setDate(tempDate.getDate() + 1);
+    }
+
+    if (allOff) {
+      currentBlock.push(curr);
+    } else {
+      blocks.push(currentBlock);
+      currentBlock = [curr];
+    }
+  }
+  blocks.push(currentBlock);
+  return blocks;
+}
+
+function renderUpcomingLeavesChips(name) {
+   const container = document.getElementById('suggestedLeavesContainer');
+   if(!name) { container.innerHTML = ''; return; }
+
+   const blocks = getUserLeaveBlocks(name);
+   if(blocks.length === 0) {
+     container.innerHTML = '<div style="font-size:10px; color:var(--sub); margin-top:8px; font-style:italic;">No upcoming leaves detected in tracking database.</div>';
+     return;
+   }
+
+   let html = '<div class="suggested-leaves-label">Upcoming Filed Leaves (Click to auto-fill)</div><div class="suggested-leaves-wrapper">';
+   blocks.forEach((block, index) => {
+     let label = "";
+     if(block.length === 1) {
+       label = block[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+     } else {
+       const s = block[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+       const e = block[block.length-1].toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+       label = `${s} - ${e} (${block.length} Days)`;
+     }
+     html += `<div class="suggested-leave-chip" onclick="selectSuggestedLeave(${index})"><span class="material-icons-round" style="font-size:12px;">event_available</span> ${label}</div>`;
+   });
+   html += '</div>';
+   container.innerHTML = html;
+   window.currentResourceLeaveBlocks = blocks;
+}
+
+function onHandoffResourceChange() {
+  const name = document.getElementById('handoffResourceUI').value;
+  renderUpcomingLeavesChips(name);
+  const manualDate = document.getElementById('handoffDateUI').value;
+  if (manualDate) { onHandoffDateChange(); }
+}
+
+function formatDateToYYYYMMDD(d) {
+   const y = d.getFullYear();
+   const m = String(d.getMonth() + 1).padStart(2, '0');
+   const day = String(d.getDate()).padStart(2, '0');
+   return `${y}-${m}-${day}`;
+}
+
+function selectSuggestedLeave(blockIndex) {
+  const block = window.currentResourceLeaveBlocks[blockIndex];
+  if(!block) return;
+  document.getElementById('handoffDateUI').value = formatDateToYYYYMMDD(block[0]);
+  triggerLivePreviewRefresh(block);
+}
+
+function onHandoffDateChange() {
+  const name = document.getElementById('handoffResourceUI').value;
+  const manualDateStr = document.getElementById('handoffDateUI').value;
+  if(!name || !manualDateStr) return;
+  const blocks = getUserLeaveBlocks(name);
+  let matchedBlock = null;
+  for (const block of blocks) {
+    const bStart = formatDateToYYYYMMDD(block[0]);
+    if (bStart === manualDateStr) {
+      matchedBlock = block;
+      break;
+    }
+  }
+
+  if (matchedBlock) {
+    triggerLivePreviewRefresh(matchedBlock);
+  } else {
+    const parts = manualDateStr.split('-');
+    const d = new Date(parseInt(parts[0],10), parseInt(parts[1],10)-1, parseInt(parts[2],10));
+    triggerLivePreviewRefresh([d]);
+  }
+}
+
+function triggerLivePreviewRefresh(blockDatesArray) {
+  const name = document.getElementById('handoffResourceUI').value;
+  if (!name) return;
+
+  if(!blockDatesArray || blockDatesArray.length === 0) {
+    const fallbackStr = document.getElementById('handoffDateUI').value;
+    if(!fallbackStr) return;
+    const parts = fallbackStr.split('-');
+    blockDatesArray = [new Date(parseInt(parts[0],10), parseInt(parts[1],10)-1, parseInt(parts[2],10))];
+  }
+  
+  const dateStringsForBackend = blockDatesArray.map(d => formatDateToYYYYMMDD(d));
+  
+  let dateHeaderStr = "";
+  if (blockDatesArray.length === 1) {
+     dateHeaderStr = blockDatesArray[0].toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', weekday: 'long' });
+  } else {
+     dateHeaderStr = blockDatesArray[0].toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', weekday: 'long' }) + " to " + blockDatesArray[blockDatesArray.length - 1].toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', weekday: 'long' });
+  }
+  pendingHandoffDatesStr = dateHeaderStr;
+  pendingHandoffResource = name;
+
+  showToastNotification("Scanning active registry for deliverables...");
+  document.getElementById('executeDraftBtnUI').disabled = true;
+  
+  google.script.run
+    .withSuccessHandler(res => {
+      if(res.success && res.data.length > 0) {
+        pendingHandoffData = res.data;
+        const tasksNeedingReassignment = res.data.filter(t => t.requiresReassignment);
+        
+        if (tasksNeedingReassignment.length > 0) {
+           triggerReassignmentModal(tasksNeedingReassignment, dateStringsForBackend[0]);
+        } else {
+           renderHandoffEmailPreview(res.data, res.signature);
+        }
+      } else {
+         renderEmptyHandoff(res.signature);
+      }
+    })
+    .fetchHandoffDataForUI(name, JSON.stringify(dateStringsForBackend), JSON.stringify(monthlyLeavesCache));
+}
+
+function triggerReassignmentModal(flaggedTasks, primaryDateStr) {
+  const container = document.getElementById('reassignTaskContainer');
+  container.innerHTML = "";
+  
+  const parts = primaryDateStr.split('-');
+  const d = new Date(parseInt(parts[0],10), parseInt(parts[1],10)-1, parseInt(parts[2],10));
+  const cacheDayToken = d.getDate() + "-" + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()];
+  const leavesOnTargetDate = monthlyLeavesCache[cacheDayToken] || [];
+  const agentsOnLeave = leavesOnTargetDate.map(l => l.name.toLowerCase());
+
+  let optionsHtml = '<option value="" disabled selected>Select Available Agent</option>';
+  teamRegistry.forEach(member => {
+    if (!agentsOnLeave.includes(member.name.toLowerCase())) {
+       optionsHtml += `<option value="${member.name}">${member.name}</option>`;
+    }
+  });
+
+  flaggedTasks.forEach((task, idx) => {
+    container.innerHTML += `
+      <div style="margin-bottom: 12px; padding: 10px; background: var(--bg); border: 1.5px solid var(--border); border-radius: var(--r-xs);">
+        <div style="font-size: 11px; font-weight: 700; color: var(--secondary); margin-bottom: 6px;">${task.task}</div>
+        <select class="form-select reassign-select" data-task-index="${idx}" style="padding: 8px;">
+          ${optionsHtml}
+        </select>
+      </div>
+    `;
+  });
+
+  document.getElementById('reassignmentModal').classList.add('active');
+  document.body.classList.add('modal-active-lock');
+}
+
+function applyReassignments() {
+  const selects = document.querySelectorAll('.reassign-select');
+  for (let s of selects) {
+    if (!s.value) {
+      alert("Please select a reassignment for all flagged tasks to continue.");
+      return;
+    }
+  }
+
+  let reassignmentIndex = 0;
+  pendingHandoffData.forEach(task => {
+    if (task.requiresReassignment) {
+       task.poc = selects[reassignmentIndex].value;
+       reassignmentIndex++;
+    }
+  });
+
+  document.getElementById('reassignmentModal').classList.remove('active');
+  document.body.classList.remove('modal-active-lock');
+  
+  const signature = pendingHandoffResource + "\nProcess Excellence Operations Central";
+  renderHandoffEmailPreview(pendingHandoffData, signature);
+}
+
+function renderHandoffEmailPreview(taskData, signature) {
+  const checklist = document.getElementById('checklistContainerUI');
+  const diagnostics = document.getElementById('diagnosticsInfoBox');
+  const previewSubject = document.getElementById('previewSubjectUI');
+  const previewBody = document.getElementById('previewBodyUI');
+  
+  checklist.innerHTML = '';
+  let bodyTxt = `Hi Team,\n\nThis is to notify you that I will be on Vacation Leave on ${pendingHandoffDatesStr}.\n\nTo ensure seamless execution, please find the operational coverage handoffs mapped for my active tasks below:\n\n`;
+  
+  taskData.forEach(item => {
+    checklist.innerHTML += `
+      <div class="task-item-card">
+        <div class="task-tags-row">
+          <span class="task-tag tag-blue">FREQ: ${item.frequency.toUpperCase()}</span>
+          ${item.requiresReassignment ? '<span class="task-tag tag-red">REASSIGNED</span>' : ''}
+        </div>
+        <div class="task-name">${item.task}</div>
+        <div class="task-mates-row">
+          <span>ASSIGNED MATES:</span>
+          <span class="mate-primary">${pendingHandoffResource.toUpperCase()}</span>
+          <span class="material-icons-round" style="font-size:12px; color:var(--sub);">arrow_forward</span>
+          <span class="mate-backup"><span class="material-icons-round" style="font-size:12px;">group</span> ${item.poc.toUpperCase()}</span>
+        </div>
+      </div>`;
+      
+    bodyTxt += `**${item.task}**\nDesignated POC:\n`;
+    let pocs = item.poc.split(/[\n,]+/);
+    pocs.forEach(p => {
+      if(p.trim() !== "") bodyTxt += `  • ${p.trim()}\n`;
+    });
+    if (item.requiresReassignment) {
+       bodyTxt += `  *[⚠️ ACTION TAKEN: Coverage reassigned due to scheduled overlaps]*\n`;
+    }
+    bodyTxt += `\n`;
+  });
+
+  bodyTxt += `Please align with the designated POCs who will take over these tasks during my leave. Thank you and see you when I get back!\n\nBest regards,\n\n${signature}`;
+  
+  diagnostics.innerHTML = `<span class="material-icons-round">info</span><div class="diagnostics-text">Scanning active projects linked to <strong>${pendingHandoffResource}</strong>. Tasks found: <strong>${taskData.length}</strong>.</div>`;
+  previewSubject.value = `VL Notification - Project Handoffs (${pendingHandoffResource})`;
+  previewBody.value = bodyTxt.trim();
+  document.getElementById('executeDraftBtnUI').disabled = false;
+}
+
+function renderEmptyHandoff(signature) {
+  document.getElementById('checklistContainerUI').innerHTML = `<div style="font-size:12px; color:var(--sub); padding:20px 0; text-align:center;">No scheduled deliverables mapped for this date.</div>`;
+  document.getElementById('diagnosticsInfoBox').innerHTML = `<span class="material-icons-round" style="color:var(--amber);">check_circle</span><div class="diagnostics-text">No active task rules triggered for this date constraint.</div>`;
+  document.getElementById('previewSubjectUI').value = `VL Notification - Schedule Clear (${pendingHandoffResource})`;
+  document.getElementById('previewBodyUI').value = `Hi Team,\n\nThis is to notify you that I will be on Vacation Leave on ${pendingHandoffDatesStr}.\n\nAll my assigned tasks have been cleared for the period, and no operational handoff is required.\n\nThank you and see you when I get back!\n\nBest regards,\n\n${signature}`;
+  document.getElementById('executeDraftBtnUI').disabled = false;
+}
+function executeHandoffDraftGeneration() {
+  const name = document.getElementById('handoffResourceUI').value;
+  const customSubj = document.getElementById('previewSubjectUI').value;
+  const customBody = document.getElementById('previewBodyUI').value;
+  
+  const btn = document.getElementById('executeDraftBtnUI');
+  btn.innerHTML = `<span class="material-icons-round" style="font-size:18px;">hourglass_empty</span> GENERATING SECURE DRAFT...`;
+  btn.disabled = true;
+  google.script.run
+    .withSuccessHandler(res => {
+      btn.innerHTML = `<span class="material-icons-round" style="font-size:18px;">send</span> DRAFT/OPEN LEAVE HANDOFF EMAIL`;
+      btn.disabled = false;
+      if (res.success) {
+        showToastNotification("Draft successfully generated! Opening Gmail compose pop-up...");
+        window.open(res.draftUrl, '_blank');
+      } else {
+        handleSystemError("Draft Generation Blocked", res.message);
+      }
+    })
+    .withFailureHandler(err => {
+      btn.innerHTML = `<span class="material-icons-round" style="font-size:18px;">send</span> DRAFT/OPEN LEAVE HANDOFF EMAIL`;
+      btn.disabled = false;
+      handleSystemError("Draft Engine Error", err.message);
+    })
+    .createEditedGmailDraft(name, customSubj, customBody);
+}
+
+function copyHandoffToClipboard() {
+  const subj = document.getElementById('previewSubjectUI').value;
+  const body = document.getElementById('previewBodyUI').value;
+  if(!subj || !body) {
+    showToastNotification("No draft content available to copy.");
+    return;
+  }
+  
+  const fullText = "Subject: " + subj + "\n\n" + body;
+  navigator.clipboard.writeText(fullText).then(() => {
+    showToastNotification("Handoff text fully copied to clipboard!");
+  }).catch(err => handleSystemError("Clipboard Copy Failed", err));
+}
+
+function submitSystemFeedback() {
+  const textInput = document.getElementById('feedbackInputUI');
+  const text = textInput.value;
+  if(!text.trim()) {
+    showToastNotification("Please enter a description before submitting.");
+    return;
+  }
+  
+  const btn = document.getElementById('submitFeedbackBtnUI');
+  btn.innerHTML = `<span class="material-icons-round" style="font-size:18px;">hourglass_empty</span> SUBMITTING...`;
+  btn.disabled = true;
+
+  google.script.run
+    .withSuccessHandler(res => {
+      btn.innerHTML = `<span class="material-icons-round" style="font-size:18px;">send</span> SUBMIT TO PIPELINE`;
+      btn.disabled = false;
+      if (res.success) {
+        textInput.value = '';
+        showToastNotification("Feedback successfully logged! Thank you.");
+      } else {
+        handleSystemError("Feedback Logging Failed", res.message);
+      }
+    })
+    .withFailureHandler(err => {
+      btn.innerHTML = `<span class="material-icons-round" style="font-size:18px;">send</span> SUBMIT TO PIPELINE`;
+      btn.disabled = false;
+      handleSystemError("Server Error", err.message);
+    })
+    .submitUserFeedback(text);
+}
+
+function showToastNotification(message) {
+  const toast   = document.getElementById('statusToast');
+  const msgNode = document.getElementById('toastMessage');
+  msgNode.innerText = message;
+  toast.classList.add('active');
+  setTimeout(() => toast.classList.remove('active'), 4000);
+}
+
+// --- CALENDAR NAVIGATION LOGIC ---
+let viewCalendarMonthNum = null;
+let viewCalendarYear = null;
+
+function changeCalendarMonth(offset) {
+  if (viewCalendarMonthNum === null) {
+    viewCalendarMonthNum = cachedMonthNum;
+    viewCalendarYear = cachedYear;
+  }
+
+  let newMonth = viewCalendarMonthNum + offset;
+  let newYear = viewCalendarYear;
+  
+  if (newMonth > 11) { newMonth = 0; newYear++; }
+  if (newMonth < 0) { newMonth = 11; newYear--; }
+
+  const monthLabel = document.getElementById('calendarMonthLabel');
+  monthLabel.innerHTML = `<span class="material-icons-round spinning-icon" style="font-size:14px; vertical-align:middle;">sync</span> Loading...`;
+  
+  google.script.run
+    .withSuccessHandler(res => {
+      if (res.success) {
+        viewCalendarMonthNum = newMonth;
+        viewCalendarYear = newYear;
+        
+        Object.assign(monthlyLeavesCache, res.calendarLeaveMap);
+        
+        const tempCachedMonth = cachedMonthNum;
+        const tempCachedYear = cachedYear;
+        cachedMonthNum = viewCalendarMonthNum;
+        cachedYear = viewCalendarYear;
+        
+        buildVisualCalendarModule();
+        
+        cachedMonthNum = tempCachedMonth;
+        cachedYear = tempCachedYear;
+      } else {
+        monthLabel.innerText = "Error Loading";
+        showToastNotification("Could not load month configuration. Is it mapped in code.gs?");
+      }
+    })
+    .withFailureHandler(err => {
+      monthLabel.innerText = "Error";
+      handleSystemError("Calendar Fetch Error", err.message);
+    })
+    .fetchMonthLeaveData(newMonth);
+}
+
+// --- START SOP LIBRARY INTEGRATION ---
+let cachedSOPData = [];
+let currentSortMode = 'name'; 
+
+// 🚀 ADVANCED TITLE CLEANER REGEX
+function cleanSOPTitle(title) {
+  return title.replace(/^(?:VLC_\d+_SOP|\[Draft\]_SOP|\d+_SOP|SOP -|SOP:|\d+_)\s*/ig, "").trim();
+}
+
+function getAvatarColor(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) { hash = str.charCodeAt(i) + ((hash << 5) - hash); }
+  const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+  return "#" + "00000".substring(0, 6 - c.length) + c;
+}
+
+function loadSOPLibrary() {
+  const container = document.getElementById('sopListContainer');
+  if (cachedSOPData.length === 0) {
+     container.innerHTML = `<div style="text-align:center; margin-top:40px; color:var(--sub);"><span class="material-icons-round spinning-icon" style="font-size:24px;">sync</span><br><br>Accessing Secure Database...</div>`;
+  }
+  
+  google.script.run
+    .withSuccessHandler((res) => { 
+      if (res.success) { 
+        cachedSOPData = res.data; 
+        
+        // Restore view preference
+        const savedView = localStorage.getItem('pexHubSopView') || 'list';
+        setSOPView(savedView);
+        
+        renderSOPList(cachedSOPData); 
+      } else {
+        container.innerHTML = `<div style="text-align:center; padding: 40px; color:var(--red); font-weight:600;">⚠️ Error loading SOPs: ${res.message}</div>`;
+        handleSystemError("SOP Fetch Failed", res.message);
+      }
+    })
+    .withFailureHandler((err) => {
+      container.innerHTML = `<div style="text-align:center; padding: 40px; color:var(--red); font-weight:600;">⚠️ Connection Error: ${err.message}</div>`;
+      handleSystemError("SOP Engine Connection Error", err.message);
+    })
+    .getSOPDataForWebApp();
+}
+
+// 🚀 SORTING LOGIC
+function handleSOPSort() {
+  currentSortMode = document.getElementById('sopSortSelect').value;
+  handleSOPSearch(); 
+}
+
+function getSortedData(dataArray) {
+  return dataArray.slice().sort((a, b) => {
+    if (currentSortMode === 'name') {
+      return cleanSOPTitle(a.title).localeCompare(cleanSOPTitle(b.title));
+    } else if (currentSortMode === 'updated') {
+      let dateA = new Date(a.lastUpdatedBy).getTime();
+      let dateB = new Date(b.lastUpdatedBy).getTime();
+      return (isNaN(dateB) ? 0 : dateB) - (isNaN(dateA) ? 0 : dateA); 
+    } else if (currentSortMode === 'created') {
+      let dateA = new Date(a.createdDate).getTime();
+      let dateB = new Date(b.createdDate).getTime();
+      return (isNaN(dateB) ? 0 : dateB) - (isNaN(dateA) ? 0 : dateA); 
+    }
+    return 0;
+  });
+}
+
+// 🚀 RENDER LIST
+function renderSOPList(dataArray) {
+  const container = document.getElementById('sopListContainer');
+  container.innerHTML = "";
+  
+  if(dataArray.length === 0) {
+    container.innerHTML = "<div style='text-align:center; padding: 40px; color:var(--sub);'>No documents matched your search.</div>";
+    return;
+  }
+
+  const sortedArray = getSortedData(dataArray);
+
+  sortedArray.forEach((sop) => {
+    const originalIndex = cachedSOPData.indexOf(sop); 
+    const displayTitle = cleanSOPTitle(sop.title);
+    const color = getAvatarColor(sop.author);
+    
+    const card = document.createElement('div');
+    card.className = "sop-card";
+    card.onclick = () => openSOPDrawer(originalIndex);
+    
+    card.innerHTML = `
+      <div class="sop-doc-icon" style="background-color: ${color}">
+        <span class="material-icons-round" style="font-size:24px;">article</span>
+      </div>
+      <div>
+        <h4 style="margin:0; font-size:14px; color:var(--secondary);">${displayTitle}</h4>
+        <small style="color: var(--sub); font-size:10px; font-weight:700; text-transform:uppercase;">Owner: ${sop.author} | Updated: ${sop.lastUpdatedBy}</small>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+// 🚀 SEARCH LOGIC
+function handleSOPSearch() {
+  const query = document.getElementById('sopSearchInput').value.toLowerCase().trim();
+  if (!query) { 
+    renderSOPList(cachedSOPData); 
+    return; 
+  }
+  
+  const filtered = cachedSOPData.filter(sop => {
+    return cleanSOPTitle(sop.title).toLowerCase().includes(query) || 
+           sop.searchIndex.includes(query);
+  });
+  renderSOPList(filtered);
+}
+
+// 🚀 VIEW TOGGLE LOGIC
+function setSOPView(mode) {
+  const container = document.getElementById('sopListContainer');
+  const btnList = document.getElementById('btnListView');
+  const btnGrid = document.getElementById('btnGridView');
+  
+  if (!container || !btnList || !btnGrid) return;
+
+  if (mode === 'grid') {
+    container.classList.add('grid-view');
+    btnGrid.classList.add('active');
+    btnList.classList.remove('active');
+  } else {
+    container.classList.remove('grid-view');
+    btnList.classList.add('active');
+    btnGrid.classList.remove('active');
+  }
+  
+  localStorage.setItem('pexHubSopView', mode);
+}
+
+// 🚀 DRAWER OPENER
+function openSOPDrawer(index) {
+  const sop = cachedSOPData[index];
+  
+  document.getElementById('drawerTitle').innerText = cleanSOPTitle(sop.title);
+  document.getElementById('drawerAuthor').innerText = sop.author;
+  
+  const avatarNode = document.getElementById('drawerAuthorAvatar');
+  avatarNode.innerHTML = '<span class="material-icons-round" style="font-size:14px;">person</span>';
+  avatarNode.style.backgroundColor = getAvatarColor(sop.author);
+  
+  document.getElementById('drawerCreated').innerText = sop.createdDate !== "N/A" ? sop.createdDate : "Unknown";
+  document.getElementById('drawerUpdated').innerText = sop.lastUpdatedBy !== "N/A" ? sop.lastUpdatedBy : "Unknown";
+  document.getElementById('drawerOpenDocsBtn').href = sop.url;
+  document.getElementById('drawerIframe').src = sop.previewIframe;
+  
+  document.getElementById('sopDrawer').style.width = '700px'; 
+  document.getElementById('sopDrawer').classList.add('open');
+}
+
+function closeSOPDrawer() {
+  document.getElementById('sopDrawer').classList.remove('open');
+  setTimeout(() => {
+    document.getElementById('drawerIframe').src = ""; 
+    document.getElementById('sopDrawer').style.width = '700px'; 
+  }, 400);
+}
+
+// 🚀 RESIZER LOGIC
+let isResizingDrawer = false;
+document.addEventListener('DOMContentLoaded', () => {
+  const drawer = document.getElementById('sopDrawer');
+  const resizer = document.getElementById('drawerResizer');
+  
+  if(resizer) {
+    resizer.addEventListener('mousedown', (e) => {
+      isResizingDrawer = true;
+      document.body.style.cursor = 'ew-resize';
+      document.getElementById('drawerIframe').style.pointerEvents = 'none';
+      e.preventDefault(); 
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizingDrawer) return;
+      let newWidth = window.innerWidth - e.clientX;
+      if (newWidth < 450) newWidth = 450;
+      if (newWidth > window.innerWidth * 0.85) newWidth = window.innerWidth * 0.85;
+      drawer.style.width = newWidth + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isResizingDrawer) {
+        isResizingDrawer = false;
+        document.body.style.cursor = '';
+        document.getElementById('drawerIframe').style.pointerEvents = 'auto';
+      }
+    });
+  }
+});
+// --- END SOP LIBRARY INTEGRATION ---
+// 🚀 KPI DRAWER RESIZER LOGIC
+let isResizingKPIDrawer = false;
+
+document.addEventListener('DOMContentLoaded', () => {
+  const kpiDrawer = document.getElementById('kpiDrawer');
+  const kpiResizer = document.getElementById('kpiDrawerResizer');
+  const kpiIframe = document.getElementById('kpiDrawerIframe');
+  
+  if (kpiResizer) {
+    kpiResizer.addEventListener('mousedown', (e) => {
+      isResizingKPIDrawer = true;
+      document.body.style.cursor = 'ew-resize';
+      if (kpiIframe) kpiIframe.style.pointerEvents = 'none';
+      e.preventDefault(); 
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizingKPIDrawer) return;
+      let newWidth = window.innerWidth - e.clientX;
+      if (newWidth < 450) newWidth = 450;
+      if (newWidth > window.innerWidth * 0.90) newWidth = window.innerWidth * 0.90;
+      if (kpiDrawer) kpiDrawer.style.width = newWidth + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isResizingKPIDrawer) {
+        isResizingKPIDrawer = false;
+        document.body.style.cursor = '';
+        if (kpiIframe) kpiIframe.style.pointerEvents = 'auto';
+      }
+    });
+  }
+});
+</script>

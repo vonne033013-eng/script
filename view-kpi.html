@@ -1,0 +1,90 @@
+<div class="workspace-view-panel" id="panelViewKPI">
+  <div id="kpi-module-wrapper">
+    <div class="sop-header">
+      <h2>KPI Process</h2>
+      <div class="sop-actions">
+        <div class="sop-search-container">
+          <span class="material-icons-round">search</span>
+          <input type="text" id="kpiSearchInput" placeholder="Search KPI metrics, reports..." onkeyup="handleKPISearch()">
+        </div>
+        
+        <div class="sop-sort-container">
+          <span class="material-icons-round sort-icon">sort</span>
+          <select id="kpiSortSelect" onchange="handleKPISort()">
+            <option value="name">Sort by Title</option>
+            <option value="updated">Sort by Last Updated</option>
+            <option value="created">Sort by Date Created</option>
+          </select>
+        </div>
+
+        <div class="sop-view-toggle">
+          <button class="view-btn active" id="btnKPIListView" onclick="setKPIView('list')" title="List View">
+            <span class="material-icons-round">format_list_bulleted</span>
+          </button>
+          <button class="view-btn" id="btnKPIGridView" onclick="setKPIView('grid')" title="Grid View">
+            <span class="material-icons-round">grid_view</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sop-workspace">
+      <div id="kpiListContainer" class="sop-list">
+        <div style="text-align:center; margin-top:40px; color:var(--sub);">
+          <span class="material-icons-round spinning-icon" style="font-size:24px;">sync</span><br><br>Loading KPI Workspace...
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FIXED SLIDE-OUT DRAWER (OUTSIDE MODULE WRAPPER TO PREVENT CLIPPING) -->
+  <div class="sop-drawer kpi-fixed-drawer" id="kpiDrawer">
+    <div class="drawer-resizer" id="kpiDrawerResizer">
+      <div class="resizer-grip"></div>
+    </div>
+
+    <div class="drawer-header-modern">
+      <div class="drawer-title-group">
+        <div class="doc-icon-wrapper">
+          <span class="material-icons-round">analytics</span>
+        </div>
+        <h3 id="kpiDrawerTitle">KPI File Details</h3>
+      </div>
+      <button class="modern-close-btn" onclick="closeKPIDrawer()">
+        <span class="material-icons-round">close</span>
+      </button>
+    </div>
+
+    <div class="drawer-meta-grid">
+      <div class="meta-col">
+        <span class="meta-label">Document Owner</span>
+        <div class="author-val">
+          <div class="meta-avatar" id="kpiDrawerAuthorAvatar"></div>
+          <span class="meta-value" id="kpiDrawerAuthor">--</span>
+        </div>
+      </div>
+      <div class="meta-col">
+        <span class="meta-label">Date Created</span>
+        <span class="meta-value" id="kpiDrawerCreated">--</span>
+      </div>
+      <div class="meta-col">
+        <span class="meta-label">Last Updated</span>
+        <span class="meta-value" id="kpiDrawerUpdated">--</span>
+      </div>
+    </div>
+
+    <div class="pro-tip-banner">
+      <span class="material-icons-round" style="color: var(--primary);">info</span>
+      <span>Use Google Workspace view controls inside the preview frame to inspect KPI analytics data.</span>
+    </div>
+
+    <div class="drawer-content">
+      <iframe id="kpiDrawerIframe" class="doc-preview-frame" src="" frameborder="0"></iframe>
+    </div>
+
+    <div class="drawer-footer-modern">
+      <button class="btn-close-outline" onclick="closeKPIDrawer()">Close Drawer</button>
+      <a id="kpiDrawerOpenDocsBtn" href="#" target="_blank" class="btn-open-docs">Open in Google Drive ↗</a>
+    </div>
+  </div>
+</div>

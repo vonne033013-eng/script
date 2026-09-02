@@ -1,0 +1,43 @@
+<div class="workspace-view-panel" id="panelViewAllocation">
+  <div class="handoff-header-banner" style="margin-bottom: 20px; padding: 24px 32px;">
+    <div class="handoff-header-title">
+      <h2 style="font-size: 20px;">Task Allocation & Capacity</h2>
+      <p style="font-size: 12px; margin-top: 4px;">Visualizing staff average hours against the standard 7.5 hour shift limit, alongside our cross-trained resource directory.</p>
+    </div>
+  </div>
+
+  <div class="allocation-filter-bar">
+    <button class="day-filter-btn active" onclick="switchAllocationDay('Monday')">Monday</button>
+    <button class="day-filter-btn" onclick="switchAllocationDay('Tuesday')">Tuesday</button>
+    <button class="day-filter-btn" onclick="switchAllocationDay('Wednesday')">Wednesday</button>
+    <button class="day-filter-btn" onclick="switchAllocationDay('Thursday')">Thursday</button>
+    <button class="day-filter-btn" onclick="switchAllocationDay('Friday')">Friday</button>
+    <button class="day-filter-btn" onclick="switchAllocationDay('Weekly Avg')">Weekly Avg</button>
+  </div>
+
+  <div class="allocation-split-grid">
+    <div class="unified-roster-box allocation-chart-card">
+      <div class="card-header" style="margin-bottom: 12px;">
+        <div class="card-title">Staff Average Hours vs. Shift Limit</div>
+        <div class="card-badge" style="background: rgba(16, 185, 129, 0.1); color: var(--green); border-color: rgba(16, 185, 129, 0.3);">
+          Capacity Tracker
+        </div>
+      </div>
+      <div style="position: relative; flex: 1; width: 100%; min-height: 300px;">
+        <canvas id="allocationChart"></canvas>
+      </div>
+    </div>
+
+    <div class="unified-roster-box allocation-directory-card">
+      <div class="card-header" style="margin-bottom: 12px;">
+        <div class="card-title">Cross-Trained Agents Directory</div>
+        <div class="card-badge" style="background: rgba(0, 97, 255, 0.1); color: var(--primary); border-color: rgba(0, 97, 255, 0.3);">
+          Project Roster
+        </div>
+      </div>
+      <div class="trained-agents-scroll-zone">
+        <div class="trained-agents-grid" id="trainedAgentsGridUI"></div>
+      </div>
+    </div>
+  </div>
+</div>

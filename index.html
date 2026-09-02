@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Process Excellence — Team Hub</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+
+<?!= include('css'); ?>
+
+</head>
+<body>
+
+<div class="login-page active" id="loginPage">
+  <div class="login-card">
+    <img src="https://i.imgur.com/t9QLyDG.png" class="login-brand-logo" alt="OPENLANE Icon">
+    <h2>Process Excellence Hub</h2>
+    <p>Centralized Operations Telemetry</p>
+    <button class="auth-btn" id="executeLoginBtnUI" onclick="initiateCorporateLogin()">
+       <span class="material-icons-round" style="font-size:18px;">lock_open</span> Authenticate Workspace
+    </button>
+    <div class="auth-error-msg" id="loginErrorContext"></div>
+  </div>
+</div>
+
+<?!= include('modals'); ?>
+
+<?!= include('splash'); ?>
+
+<div class="main-content-wrapper" id="mainContent">
+  <div class="shell" id="appShellFrame">
+
+    <?!= include('sidebar'); ?>
+
+    <main class="main">
+      <div class="topbar-wrapper">
+        <div class="topbar-left-cluster">
+          <button class="return-hub-arrow-trigger-btn" onclick="returnBackToTitlePageHub()" title="Return to Hub">
+            <span class="material-icons-round" style="font-size:18px;">arrow_upward</span>
+          </button>
+          <div class="topbar-title-block">
+            <div class="topbar-breadcrumb">OPENLANE · Process Excellence</div>
+            <div class="topbar-heading" id="workspaceHeaderTitle">Attendance &amp; VL</div>
+          </div>
+        </div>
+        <div class="topbar-right-cluster" id="topbarControlsUI">
+          <div class="date-chip" id="currentDate">Calibrating...</div>
+          <button class="topbar-action-icon-btn" onclick="startTutorial()" title="Interactive Tour">
+            <span class="material-icons-round">school</span>
+          </button>
+          <button class="topbar-action-icon-btn" onclick="toggleDashboardThemeEngine()" title="Toggle theme">
+            <span class="material-icons-round" id="themeIconNode">dark_mode</span>
+          </button>
+          <button class="topbar-action-icon-btn" id="refreshDataBtnNode" onclick="triggerTelemetryRefreshAction()" title="Refresh data">
+            <span class="material-icons-round">sync</span>
+          </button>
+          <button class="topbar-action-icon-btn logout-btn" onclick="executeManualLogout()" title="Secure Logout">
+            <span class="material-icons-round">logout</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="scroll-zone">
+
+        <section class="kpi-strip" id="mainKpiStrip">
+          <div class="kpi">
+            <div class="kpi-row">
+              <span class="kpi-label">Team Roster</span>
+              <div class="kpi-icon"><span class="material-icons-round">groups</span></div>
+            </div>
+            <div class="kpi-value" id="rosterCountCard">--</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" style="width:100%;"></div></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-row">
+              <span class="kpi-label">Active Headcount</span>
+              <div class="kpi-icon"><span class="material-icons-round">how_to_reg</span></div>
+            </div>
+            <div class="kpi-value" id="attendanceCountCard">--</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" id="attendanceBarCard" style="width:0%;"></div></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-row">
+              <span class="kpi-label">Leaves / Off Today</span>
+              <div class="kpi-icon" style="background:#FEF9E7;"><span class="material-icons-round" style="color:var(--amber);">beach_access</span></div>
+            </div>
+            <div class="kpi-value" id="leaveCountCard">--</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" id="leaveBarCard" style="width:0%; background:var(--amber);"></div></div>
+          </div>
+        </section>
+
+        <?!= include('view-tracker'); ?>
+        <?!= include('view-demo'); ?>
+        <?!= include('view-handoff'); ?>
+        <?!= include('view-sources'); ?>
+        <?!= include('view-allocation'); ?>
+        <?!= include('view-sop'); ?>
+        <?!= include('view-kpi'); ?>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<?!= include('js'); ?>
+
+</body>
+</html>

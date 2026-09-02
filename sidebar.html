@@ -1,0 +1,61 @@
+<aside class="sidebar">
+  <div class="sidebar-top-branding-row">
+    <div class="sidebar-logo">
+      <div class="logo-mark">
+        <div class="logo-image-container">
+          <img src="https://i.imgur.com/t9QLyDG.png" class="sidebar-brand-img" alt="OPENLANE Icon">
+        </div>
+        <div class="logo-metadata-text">
+          <div class="logo-text">PEX Hub</div>
+          <div class="logo-sub">Operations Central</div>
+        </div>
+      </div>
+    </div>
+    <button class="sidebar-collapse-toggle-trigger" onclick="toggleSidebarMenuExpansion()" title="Collapse navigation">
+      <span class="material-icons-round" id="collapseIconToggleNode">menu_open</span>
+    </button>
+  </div>
+
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Telemetry Control</div>
+    
+    <div class="nav-item" id="menuBtnDemo" onclick="switchActiveWorkspaceView('demo')">
+      <span class="material-icons-round">groups</span>
+      <span>Member Details</span>
+    </div>
+
+    <div class="nav-item" id="menuBtnAllocation" onclick="switchActiveWorkspaceView('allocation')">
+      <span class="material-icons-round">insert_chart</span>
+      <span>Task Allocation</span>
+    </div>
+
+    <div class="nav-item active" id="menuBtnTracker" onclick="switchActiveWorkspaceView('tracker')">
+      <span class="material-icons-round">event_available</span>
+      <span>Attendance &amp; VL</span>
+    </div>
+
+    <div class="nav-item" id="menuBtnHandoff" onclick="switchActiveWorkspaceView('handoff')">
+      <span class="material-icons-round">assignment_turned_in</span>
+      <span>Project Handoffs</span>
+    </div>
+
+    <!-- NEW SOP LIBRARY LINK -->
+    <div class="nav-item" id="menuBtnSOP" onclick="switchActiveWorkspaceView('sop')" data-tour="sop-nav">
+      <span class="material-icons-round">library_books</span>
+      <span>SOP Library</span>
+    </div>
+    <div class="nav-item" id="menuBtnKPI" onclick="switchActiveWorkspaceView('kpi')">
+  <span class="material-icons-round">analytics</span>
+  <span>KPI Process</span>
+</div>
+
+    <div class="nav-item" id="menuBtnSources" onclick="switchActiveWorkspaceView('sources')">
+      <span class="material-icons-round">lightbulb</span>
+      <span>Sources &amp; Suggestions</span>
+    </div>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="sidebar-version-tag">PEX Hub · v2.0</div>
+  </div>
+</aside>

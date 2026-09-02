@@ -1,0 +1,85 @@
+<div class="workspace-view-panel active-view" id="panelViewTracker">
+  <div class="console-split-grid">
+    
+    <!-- LEFT COLUMN: TODAY'S ATTENDANCE TRACKER -->
+    <div class="unified-roster-box" id="unifiedRosterBoxCard">
+      <div class="card-header">
+        <div class="card-title" id="rosterBoxHeaderTitle">Team Members Attendance Track</div>
+        <div class="card-badge">Live</div>
+      </div>
+      <div class="roster-list" id="teamRosterContainer"></div>
+    </div>
+    
+    <!-- RIGHT COLUMN: VL APPLICATION FORM & MONTHLY CALENDAR -->
+    <div class="vl-application-section-box" id="vlFilingCardUI">
+      <div class="card-header" style="margin-bottom: 6px;">
+        <div class="card-title">VL Application Section</div>
+      </div>
+      <div class="section-subtitle">Filing System &amp; Monthly Leave Roster Tracking</div>
+      
+      <!-- SINGLE CLEAN FILING FORM -->
+      <div class="filing-mini-form">
+  <div class="form-row">
+    <div class="form-group">
+      <label class="form-label">Start Date</label>
+      <input type="date" class="form-input" id="formLeaveStartDateInput">
+    </div>
+    <div class="form-group">
+      <label class="form-label">End Date (Optional)</label>
+      <input type="date" class="form-input" id="formLeaveEndDateInput">
+    </div>
+  </div>
+  
+  <div class="form-row" style="margin-top: 10px;">
+    <div class="form-group form-group-full">
+      <label class="form-label">Leave Type</label>
+      <select class="form-select" id="formLeaveTypeSelect" onchange="toggleShiftHalfDropdown()">
+        <option value="VL">VL (Vacation Leave)</option>
+        <option value="HDVL">HDVL (Half Day VL)</option>
+        <option value="BL">BL (Birthday Leave)</option>
+      </select>
+    </div>
+  </div>
+  
+  <!-- DYNAMIC SHIFT HALF DROPDOWN -->
+  <div class="form-group form-group-full" id="shiftHalfGroup" style="display: none; margin-top: 10px;">
+    <label class="form-label">HDVL Shift Segment</label>
+    <select class="form-select" id="formShiftHalfSelect">
+      <option value="HDVL 1st ">1st Half of Shift</option>
+      <option value="HDVL 2nd ">2nd Half of Shift</option>
+    </select>
+  </div>
+
+  <div class="form-group form-group-full" style="margin-top: 10px;">
+    <label class="form-label">Employee Name</label>
+    <select class="form-select" id="formEmployeeSelect"></select>
+  </div>
+  
+  <button class="file-submit-btn" onclick="submitOfficialLeaveForm()" style="margin-top: 14px;">Commit Leave File</button>
+  
+  <div style="font-size:10px; color:var(--sub); margin-top:12px; text-align:center; line-height:1.4;">
+    Reminder: Make sure to use the <span style="color:var(--primary); font-weight:700; cursor:pointer; text-decoration:underline dashed;" onclick="switchActiveWorkspaceView('handoff')">Project Handoffs</span> feature to schedule handoff emails for your filed VL.
+  </div>
+</div>
+      <!-- CALENDAR INSIDE RIGHT CONTAINER -->
+      <div class="calendar-card-header" style="margin-top: 18px;">
+        <div class="calendar-month-title" style="display: flex; align-items: center; gap: 12px;">
+          <button class="topbar-action-icon-btn" style="width:26px; height:26px; background:var(--bg);" onclick="changeCalendarMonth(-1)" title="Previous Month">
+            <span class="material-icons-round" style="font-size:16px;">chevron_left</span>
+          </button>
+          <span id="calendarMonthLabel" style="min-width: 110px; text-align: center;">--</span>
+          <button class="topbar-action-icon-btn" style="width:26px; height:26px; background:var(--bg);" onclick="changeCalendarMonth(1)" title="Next Month">
+            <span class="material-icons-round" style="font-size:16px;">chevron_right</span>
+          </button>
+        </div>
+        <div class="calendar-legend">
+          <div class="cal-legend-dot"></div>
+          <div class="cal-legend-label">Leaves filed</div>
+        </div>
+      </div>
+      
+      <div class="calendar-grid-wrapper" id="calendarGridBody"></div>
+    </div>
+
+  </div>
+</div>

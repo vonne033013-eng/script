@@ -1,0 +1,49 @@
+<div class="title-page out" id="titlePage">
+  <div class="title-stripe"></div>
+  <img src="https://i.imgur.com/t9QLyDG.png" class="brand-logo" id="brandLogo" alt="Process Excellence Team Logo">
+  <div class="title-eyebrow" id="introEyebrow">OPENLANE PH · PEX</div>
+  <h1 class="splash-title">Process Excellence<br>Team</h1>
+  
+  <p id="introSub">Forward Together</p>
+  
+  <div class="title-hub-menu-controls" id="titleMenuControls">
+    
+    <button class="hub-entry-btn btn-alt" onclick="triggerTitleAnchorRoute('demo')">
+      <span class="material-icons-round">groups</span> Member Details
+    </button>
+
+    <button class="hub-entry-btn btn-alt" onclick="triggerTitleAnchorRoute('allocation')">
+      <span class="material-icons-round">insert_chart</span> Task Allocation
+    </button>
+
+    <button class="hub-entry-btn btn-alt" onclick="triggerTitleAnchorRoute('tracker')">
+      <span class="material-icons-round">event_available</span> Attendance &amp; VL
+    </button>
+
+    <button class="hub-entry-btn btn-alt" onclick="triggerTitleAnchorRoute('handoff')">
+      <span class="material-icons-round">assignment_turned_in</span> Project Handoffs
+    </button>
+    
+    <!-- NEW SOP LIBRARY ENTRY -->
+    <button class="hub-entry-btn btn-alt" onclick="triggerTitleAnchorRoute('sop')" data-tour="sop-card">
+      <span class="material-icons-round">library_books</span> SOP Library
+    </button>
+    <button class="hub-entry-btn btn-alt" onclick="triggerTitleAnchorRoute('kpi')">
+  <span class="material-icons-round">analytics</span> KPI Process
+</button>
+
+    <button class="hub-entry-btn btn-alt" onclick="triggerTitleAnchorRoute('sources')">
+      <span class="material-icons-round">lightbulb</span> Sources &amp; Suggestions
+    </button>
+    
+    <div style="flex-basis: 100%; display: flex; justify-content: center; margin-top: 12px;">
+      <button class="hub-entry-btn" onclick="launchTourFromHub()" style="background: linear-gradient(135deg, var(--green) 0%, #059669 100%); width: 100%; max-width: 320px; justify-content: center;">
+        <span class="material-icons-round">school</span> Take the Hub Tour
+      </button>
+    </div>
+  </div>
+
+  <div class="scroll-indicator" id="scrollIndicator" onclick="triggerTitleAnchorRoute('demo')" title="Go to Member Details">
+    <span class="material-icons-round">keyboard_double_arrow_down</span>
+  </div>
+</div>

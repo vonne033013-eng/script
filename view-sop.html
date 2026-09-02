@@ -1,0 +1,103 @@
+<div class="workspace-view-panel" id="panelViewSOP">
+  <div id="sop-module-wrapper">
+    
+    <!-- Topbar, Search, Sort, & View Toggle -->
+    <div class="sop-header">
+      <h2>Standard Operating Procedures</h2>
+      <div class="sop-actions">
+        
+        <!-- Search -->
+        <div class="sop-search-container" data-tour="sop-search">
+          <span class="material-icons-round">search</span>
+          <input type="text" id="sopSearchInput" placeholder="Search titles, codes, or content..." oninput="handleSOPSearch()">
+        </div>
+
+        <!-- Sort Dropdown -->
+        <div class="sop-sort-container">
+          <span class="material-icons-round sort-icon">sort</span>
+          <select id="sopSortSelect" onchange="handleSOPSort()">
+            <option value="name">Sort by Name</option>
+            <option value="updated">Sort by Last Updated</option>
+            <option value="created">Sort by Created Date</option>
+          </select>
+        </div>
+
+        <!-- View Toggle -->
+        <div class="sop-view-toggle">
+          <button id="btnListView" class="view-btn active" onclick="setSOPView('list')" title="List View">
+            <span class="material-icons-round">view_list</span>
+          </button>
+          <button id="btnGridView" class="view-btn" onclick="setSOPView('grid')" title="Grid View">
+            <span class="material-icons-round">grid_view</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Main Workspace -->
+    <div class="sop-workspace">
+      <div class="sop-list" id="sopListContainer">
+        <!-- JS will populate cards here -->
+        <div style="text-align:center; margin-top:40px; color:var(--sub);">
+          <span class="material-icons-round spinning-icon">sync</span> Loading Database...
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide-out Drawer Preview -->
+    <div id="sopDrawer" class="sop-drawer">
+      
+      <!-- DRAG HANDLE FOR RESIZING -->
+      <div id="drawerResizer" class="drawer-resizer" title="Drag to resize">
+         <div class="resizer-grip"></div>
+      </div>
+
+      <!-- Header Row -->
+      <div class="drawer-header-modern">
+        <div class="drawer-title-group">
+          <div class="doc-icon-wrapper"><span class="material-icons-round">description</span></div>
+          <h3 id="drawerTitle">Document Title</h3>
+        </div>
+        <button onclick="closeSOPDrawer()" class="modern-close-btn"><span class="material-icons-round">close</span></button>
+      </div>
+
+      <!-- Metadata Grid -->
+      <div class="drawer-meta-grid">
+        <div class="meta-col">
+          <span class="meta-label">OWNER / AUTHOR</span>
+          <div class="meta-value author-val">
+            <div class="meta-avatar" id="drawerAuthorAvatar"></div>
+            <span id="drawerAuthor"></span>
+          </div>
+        </div>
+        <div class="meta-col">
+          <span class="meta-label">CREATED DATE</span>
+          <span class="meta-value" id="drawerCreated"></span>
+        </div>
+        <div class="meta-col">
+          <span class="meta-label">LAST REVISION</span>
+          <span class="meta-value" id="drawerUpdated"></span>
+        </div>
+      </div>
+
+      <!-- Pro Tip Banner -->
+      <div class="pro-tip-banner">
+        <span class="material-icons-round" style="color:#0061FF; font-size:16px;">lightbulb</span>
+        <span><strong style="color:#0A1B5F;">Pro Tip:</strong> Click inside the preview below, then press <strong>Ctrl + F</strong> to search!</span>
+      </div>
+
+      <!-- Iframe Container -->
+      <div class="drawer-content">
+        <iframe id="drawerIframe" class="doc-preview-frame" src=""></iframe>
+      </div>
+
+      <!-- Footer Actions -->
+      <div class="drawer-footer-modern">
+        <a id="drawerOpenDocsBtn" href="#" target="_blank" class="btn-open-docs">Open in Google Docs</a>
+        <button onclick="closeSOPDrawer()" class="btn-close-outline">Close</button>
+      </div>
+
+    </div>
+  </div>
+</div>
